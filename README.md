@@ -1,97 +1,114 @@
-# ⚡ Power Center Extreme
+# ⚡ VoltTamer (formerly Power Center Extreme)
 
-**Power Center Extreme** es una herramienta TUI (Terminal User Interface) y un demonio en segundo plano diseñado para el control total y la monitorización en vivo del consumo energético de tu computadora Linux. Fue construido pensando en portabilidad, eficiencia extrema, y adaptabilidad para cualquier distribución de Linux.
+**VoltTamer** is a highly efficient TUI (Terminal User Interface) and background daemon designed for total control and live monitoring of your Linux computer's energy consumption. Built with portability, extreme efficiency, and adaptability in mind, it's designed to work flawlessly across any Linux distribution and hardware setup.
 
-![Power Center Extreme](https://img.shields.io/badge/Linux-🐧-blue) ![Python](https://img.shields.io/badge/Python-3.x-green)
-
----
-
-## 🌟 Características
-
-* **Monitor de Energía en Vivo:** Visualiza en un gráfico dinámico (dibujado con braille) el historial de milivatios, además de los procesos más hambrientos y el porcentaje de batería en tiempo real.
-* **Control Completo del Hardware:** Ajusta con las flechas del teclado los límites térmicos (PL1 y PL2 en Watts), el brillo máximo, y habilita/deshabilita componentes clave.
-* **Compatibilidad Universal:** Funciona sin importar tu fabricante (Intel/AMD) ni modelo, auto-detectando rutas dinámicas en `/sys/` para el controlador RAPL, Turbo Boost, Backlight del teclado/pantalla, y Power Save de Audio.
-* **Integración Opcional con Hyprland:** Si utilizas el gestor de ventanas Hyprland, `power-center` detectará tu monitor primario y ajustará la frecuencia de actualización (Hz) dinámicamente según el perfil elegido para ahorrar batería.
-* **Modos Preconfigurados (Daemon):** Un clic para aplicar reglas del sistema, incluyendo modos como *Auto-Extreme*, *Performance* o *Extreme Battery*.
+![Linux](https://img.shields.io/badge/Linux-🐧-blue) ![Python](https://img.shields.io/badge/Python-3.x-green) ![Open Source](https://img.shields.io/badge/Open_Source-❤️-orange)
 
 ---
 
-## ⚙️ Requisitos Previos
+## 🌟 Key Features
+
+* **Live Energy Monitor:** Visualize historical power consumption in milliwatts via an interactive braille graph, alongside real-time battery percentage and a live list of the most power-hungry processes.
+* **Full Hardware Control:** Use your keyboard arrows to seamlessly tweak thermal limits (PL1 and PL2 in Watts), maximum screen brightness, and toggle key hardware components.
+* **Universal Compatibility:** VoltTamer auto-detects dynamic paths in `/sys/` (using `glob`), making it inherently compatible with Intel, AMD, and various OEM backlight implementations (screen and keyboard).
+* **Optional Hyprland Integration:** If you are running the Hyprland Wayland compositor, VoltTamer detects your primary monitor and scales the refresh rate (Hz) dynamically based on the active power profile.
+* **Pre-configured Daemon Modes:** Instantly apply system-wide rules with a single click or command. Profiles include *Auto-Extreme*, *Performance*, and *Extreme Battery*.
+
+---
+
+## ⚙️ Prerequisites
 
 - Python 3.x
-- Permisos de `sudo` (requerido únicamente para aplicar los perfiles de energía, ya que se modifican rutas de `/sys/`).
-- Opcional pero recomendado: Estar bajo el entorno `Hyprland` y tener `brightnessctl` instalado.
+- `sudo` privileges (required to apply power profiles, as it alters kernel `/sys/` parameters).
+- *Optional but recommended:* Hyprland (for dynamic Hz scaling) and `brightnessctl` (for reliable screen brightness control fallback).
 
 ---
 
-## 🚀 Instalación (1 Comando)
+## 🚀 Installation (1-Command)
 
-Descarga el repositorio y ejecuta el script de instalación para alojarlo globalmente en tu sistema:
+Clone the repository and run the installation script to make it globally available on your system:
 
 ```bash
 git clone https://github.com/Juan-Martin-Cerezo/power-center-extreme.git
 cd power-center-extreme
 sudo ./install.sh
 ```
-*(Esto copiará el programa a tu `$PATH` como `power-center`)*
+*(This will install the script to `/usr/local/bin/power-center` / `volt-tamer`)*
 
-### Notas de Instalación Local
-Si prefieres no instalarlo a nivel de todo el sistema operativo, puedes simplemente moverlo a tu directorio personal:
+### Local Installation (No Root)
+If you prefer not to install it globally, you can easily deploy it to your local user binary directory:
 ```bash
 mkdir -p ~/.local/bin
 cp power-center.py ~/.local/bin/power-center
 chmod +x ~/.local/bin/power-center
 ```
-*(Asegúrate de que `~/.local/bin` esté en tu variable `$PATH`)*
+*(Ensure `~/.local/bin` is added to your `$PATH`)*
 
 ---
 
-## 🎮 Cómo Usarlo
+## 🎮 How to Use
 
-### 1. Interfaz de Monitorización TUI (Sin permisos especiales)
-Puedes revisar el consumo energético actual o abrir la configuración sin aplicar comandos abriéndolo directamente:
+### 1. Interactive TUI Monitor (No special permissions needed)
+You can check current energy consumption or browse hardware specs by launching the UI directly:
 ```bash
 power-center
 ```
-* **Flechas `↑` `↓`**: Moverse por el panel principal.
-* **Flechas `←` `→`**: Alterar valores numéricos de hardware (ej: límite de Watts).
-* **`Tabulador`**: Cambiar entre el "Panel de Control" y el "Monitor de Energía (Gráfico)".
-* **`Q`**: Salir de forma segura.
+* **Arrows `↑` `↓`**: Navigate the main control panel.
+* **Arrows `←` `→`**: Adjust hardware numerical values (e.g., Watt limits).
+* **`Tab`**: Switch between the "Control Panel" and the "Live Energy Graph Monitor".
+* **`Q`**: Exit safely.
 
-### 2. Panel de Control y Modos Especiales (Requiere `sudo`)
-Para que los cambios de voltaje o de modos surtan efecto, necesitas privilegios de root:
+### 2. Control Panel & Special Modes (Requires `sudo`)
+For voltage limits and daemon modes to take effect, you must launch the TUI as root:
 ```bash
 sudo power-center
 ```
-Selecciona el modo deseado dentro de la interfaz, presiona `ENTER`, y `power-center` ejecutará todos los ajustes de fondo.
+Select your desired mode in the UI, press `ENTER`, and VoltTamer will apply the kernel tweaks in the background.
 
-### 3. Cambio de Modos Directo desde la Consola
-Si quieres cambiar la configuración al instante (útil para alias o atajos de teclado de tu Window Manager), puedes enviar los comandos directamente:
+### 3. Headless CLI Control (Direct Commands)
+If you want to map power modes to your Window Manager keybindings or run them from a shell script, you can trigger modes directly:
 
-* **Modo Ahorro Extremo:** 
+* **Extreme Battery Saver Mode:** Cuts resources aggressively for maximum battery life.
   ```bash
   sudo power-center mode extreme
   ```
-* **Modo Rendimiento Máximo:**
+* **Maximum Performance Mode:** Releases all hardware limits for gaming or compiling.
   ```bash
   sudo power-center mode performance
   ```
-* **Modo Inteligente Automático:** Ajusta el rendimiento y el brillo dinámicamente según lo que estés haciendo.
+* **Auto-Extreme Mode:** Dynamically scales performance and brightness based on your real-time workload.
   ```bash
   sudo power-center mode auto-extreme
   ```
-* **Modo Restauración:**
+* **Restore Default State:**
   ```bash
   sudo power-center mode restore
   ```
 
-### 4. Monitor Gráfico Exclusivo
-Si tienes otra terminal abierta y solo quieres dejar el gráfico corriendo:
+### 4. Graph-Only View
+Launch directly into the real-time consumption graph:
 ```bash
 power-center --monitor
 ```
 
 ---
 
-## 🛠️ Contribuciones y Hardware Especial
-Dado que el programa ha sido refactorizado para utilizar `glob` para descubrir componentes de hardware, siéntete libre de abrir un **Pull Request** si notas que tu placa base o controlador en particular (`/sys/...`) no es detectado correctamente.
+## 🤝 How to Contribute
+
+We actively welcome contributions to make VoltTamer even more universal! Whether you're fixing a bug, adding support for a niche piece of hardware, or improving the UI, your help is appreciated.
+
+### Contribution Guidelines:
+1. **Fork the Repository:** Create a personal fork of the project on GitHub.
+2. **Create a Branch:** Work your magic in a dedicated feature branch (`git checkout -b feature/amd-gpu-support`).
+3. **Commit your Changes:** Write clear, concise commit messages.
+4. **Test Thoroughly:** Ensure that your changes do not break compatibility with standard Intel/AMD hardware paths. Since VoltTamer uses generic `glob` lookups for `/sys/` paths, please try to maintain that philosophy instead of hardcoding OEM-specific strings.
+5. **Open a Pull Request (PR):** Submit your PR against the `master` branch. Please include a description of the hardware you tested it on!
+
+### Where we need help:
+* Expanding CPU governor support (e.g., `amd_pstate_epp`).
+* Adding dedicated GPU power limiting (NVIDIA/AMD).
+* Translating the Python UI into English or supporting multi-language (i18n).
+* Optimizing the Braille rendering engine for older terminal emulators.
+
+---
+*Created and maintained by Juan Martin Cerezo*
