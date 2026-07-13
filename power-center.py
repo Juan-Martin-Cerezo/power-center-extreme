@@ -801,7 +801,10 @@ def draw_view_menu(stdscr, idx, h, w):
     stdscr.addstr(h-5, 2, "─" * (w-4))
     stdscr.addstr(h-4, 2, "EXPLICACIÓN:", curses.A_BOLD)
     stdscr.addstr(h-3, 4, OPTIONS[idx]["desc"][:w-8], curses.A_ITALIC)
-    stdscr.addstr(h-1, 2, "[↑↓] Navegar | [←→] Ajustar | [ENTER] Acción | [Tab] Alternar Vista Monitor | [Q] Salir", curses.A_DIM)
+    try:
+        stdscr.addstr(h-1, 2, "[↑↓] Navegar | [←→] Ajustar | [ENTER] Acción | [Tab] Alternar Vista Monitor | [Q] Salir", curses.A_DIM)
+    except:
+        pass
 
 def main(stdscr):
     try:
@@ -940,7 +943,10 @@ def main(stdscr):
                     stdscr.addstr(graph_y + 1, 2, "GRÁFICO DE CONSUMO HISTÓRICO:", curses.A_BOLD)
                     dash.draw_graph(stdscr, graph_y + 2, 2, graph_h - 2, graph_w, dash.history)
             
-            stdscr.addstr(h - 1, 2, f"Navegación: [Q] Salir | [+] Sumar tiempo (+100ms) | [-] Restar tiempo (-100ms) | [Tab] Volver al panel", curses.A_DIM)
+            try:
+                stdscr.addstr(h - 1, 2, f"Navegación: [Q] Salir | [+] Sumar tiempo (+100ms) | [-] Restar tiempo (-100ms) | [Tab] Volver al panel", curses.A_DIM)
+            except:
+                pass
 
         # Keyboard Interactivity
         key = stdscr.getch()
