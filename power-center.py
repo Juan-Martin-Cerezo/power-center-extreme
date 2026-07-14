@@ -809,39 +809,42 @@ def daemon_loop():
             else:
                 power_level = max(0.0, power_level - 0.05)
                 
-            target_cores = max(1, int(1 + power_level * (max_cores - 1)))
-            target_cpu = int(min_cpu + power_level * (max_cpu - min_cpu))
-            target_gpu = int(min_gpu + power_level * (max_gpu - min_gpu))
-            target_rapl = int(min_w + power_level * (max_w - min_w))
+            # Round to nearest 20% step to prevent ANY micro-adjustments across all values
+            discrete_power = round(power_level * 5) / 5.0
+            
+            target_cores = max(1, int(1 + discrete_power * (max_cores - 1)))
+            target_cpu = int(min_cpu + discrete_power * (max_cpu - min_cpu))
+            target_gpu = int(min_gpu + discrete_power * (max_gpu - min_gpu))
+            target_rapl = int(min_w + discrete_power * (max_w - min_w))
             
             win_class = get_active_window_class()
             is_heavy_ui = any(x in win_class for x in ["chrome", "firefox", "brave", "zen", "code", "idea", "studio", "cursor"])
             max_b = 30 if is_heavy_ui else 10
             min_b = 5
-            target_brightness = max(min_b, min(max_b, int(min_b + power_level * (max_b - min_b))))
+            target_brightness = max(min_b, min(max_b, int(min_b + discrete_power * (max_b - min_b))))
             
-            if power_level < 0.3:
+            if discrete_power < 0.3:
                 target_epp = "power"
-            elif power_level < 0.7:
+            elif discrete_power < 0.7:
                 target_epp = "balance_performance"
             else:
                 target_epp = "performance"
                 
-            target_turbo = power_level > 0.8
+            target_turbo = discrete_power >= 0.8
             
             if target_cores != last_cores:
                 set_cores(target_cores)
                 last_cores = target_cores
                 
-            if abs(target_cpu - last_cpu) >= 100 or last_cpu == -1:
+            if target_cpu != last_cpu:
                 set_freq_limit(target_cpu)
                 last_cpu = target_cpu
                 
-            if abs(target_gpu - last_gpu) >= 50 or last_gpu == -1:
+            if target_gpu != last_gpu:
                 set_gpu_limit(target_gpu)
                 last_gpu = target_gpu
                 
-            if abs(target_rapl - last_rapl) >= 1 or last_rapl == -1:
+            if target_rapl != last_rapl:
                 set_rapl_pl1(target_rapl)
                 set_rapl_pl2(target_rapl)
                 last_rapl = target_rapl
@@ -854,7 +857,7 @@ def daemon_loop():
                 _set_turbo(target_turbo)
                 last_turbo = target_turbo
                 
-            if abs(target_brightness - last_brightness) >= 5 or last_brightness == -1:
+            if target_brightness != last_brightness:
                 _set_brightness_target(target_brightness)
                 last_brightness = target_brightness
             
