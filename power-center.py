@@ -25,17 +25,21 @@ def get_sys_val(path):
         return ""
 
 def set_sys_val(path, val):
-    subprocess.run(f"echo {val} > {path}", shell=True)
+    try:
+        with open(path, 'w') as f:
+            f.write(str(val))
+    except:
+        pass
 
 # --- HARDWARE LOGIC ---
 
 def _set_turbo(enabled):
     val = "0" if enabled else "1"
     if os.path.exists("/sys/devices/system/cpu/intel_pstate/no_turbo"):
-        subprocess.run(f"echo {val} > /sys/devices/system/cpu/intel_pstate/no_turbo", shell=True)
+        set_sys_val("/sys/devices/system/cpu/intel_pstate/no_turbo", val)
     elif os.path.exists("/sys/devices/system/cpu/cpufreq/boost"):
         val_boost = "1" if enabled else "0"
-        subprocess.run(f"echo {val_boost} > /sys/devices/system/cpu/cpufreq/boost", shell=True)
+        set_sys_val("/sys/devices/system/cpu/cpufreq/boost", val_boost)
 
 def _get_turbo():
     if os.path.exists("/sys/devices/system/cpu/intel_pstate/no_turbo"):
@@ -82,12 +86,17 @@ def get_freq_limit():
 def set_freq_limit(mhz):
     min_mhz, max_mhz = get_cpu_freq_bounds()
     mhz = max(min_mhz, min(max_mhz, mhz))
-    subprocess.run(f"for i in /sys/devices/system/cpu/cpu*/cpufreq/scaling_max_freq; do [ -f \"$i\" ] && echo {mhz*1000} > \"$i\"; done", shell=True)
-
+    max_khz = mhz * 1000
+    min_khz = min_mhz * 1000
+    for base in glob.glob("/sys/devices/system/cpu/cpu*/cpufreq"):
+        set_sys_val(os.path.join(base, "scaling_min_freq"), min_khz)
+        set_sys_val(os.path.join(base, "scaling_max_freq"), max_khz)
 
 def _set_audio_powersave(enabled):
     val = "1" if enabled else "0"
-    subprocess.run(f"for i in /sys/module/snd_*/parameters/power_save; do [ -f \"$i\" ] && echo {val} > \"$i\"; done", shell=True)
+    for i in glob.glob("/sys/module/snd_*/parameters/power_save"):
+        if os.path.isfile(i):
+            set_sys_val(i, val)
 
 def _get_audio_powersave():
     import glob
@@ -144,26 +153,47 @@ def get_battery():
     return get_sys_val("/sys/class/power_supply/BAT0/capacity")
 
 # Intel RAPL & EPP Helpers
-def _get_rapl_path():
+def _get_rapl_path(type_name="long_term"):
     import glob
-    paths = glob.glob("/sys/class/powercap/*rapl*0")
-    return paths[0] if paths else "/sys/class/powercap/intel-rapl/intel-rapl:0"
+    for p in glob.glob("/sys/class/powercap/intel-rapl:[0-9]/constraint_*_name"):
+        val = get_sys_val(p)
+        if type_name in val:
+            return p.replace("_name", "_power_limit_uw")
+    return ""
+
+def get_rapl_bounds():
+    max_uw = 115000000
+    min_uw = 5000000
+    base = "/sys/class/powercap/intel-rapl:0"
+    if os.path.exists(f"{base}/max_power_range_uw"):
+        val = get_sys_val(f"{base}/max_power_range_uw")
+        if val: max_uw = int(val)
+    if os.path.exists(f"{base}/min_power_range_uw"):
+        val = get_sys_val(f"{base}/min_power_range_uw")
+        if val: min_uw = int(val)
+    return min_uw // 1000000, max_uw // 1000000
 
 def get_rapl_pl1():
-    val = get_sys_val(f"{_get_rapl_path()}/constraint_0_power_limit_uw")
+    path = _get_rapl_path("long_term")
+    val = get_sys_val(path) if path else ""
     return int(val) // 1000000 if val else 0
 
 def set_rapl_pl1(watts):
-    watts = max(5, min(115, watts))
-    set_sys_val(f"{_get_rapl_path()}/constraint_0_power_limit_uw", watts * 1000000)
+    path = _get_rapl_path("long_term")
+    if path:
+        min_w, max_w = get_rapl_bounds()
+        set_sys_val(path, max(min_w, min(max_w, watts)) * 1000000)
 
 def get_rapl_pl2():
-    val = get_sys_val(f"{_get_rapl_path()}/constraint_1_power_limit_uw")
+    path = _get_rapl_path("short_term")
+    val = get_sys_val(path) if path else ""
     return int(val) // 1000000 if val else 0
 
 def set_rapl_pl2(watts):
-    watts = max(5, min(115, watts))
-    set_sys_val(f"{_get_rapl_path()}/constraint_1_power_limit_uw", watts * 1000000)
+    path = _get_rapl_path("short_term")
+    if path:
+        min_w, max_w = get_rapl_bounds()
+        set_sys_val(path, max(min_w, min(max_w, watts)) * 1000000)
 
 EPP_PREFERENCES = ["default", "performance", "balance_performance", "balance_power", "power"]
 
@@ -175,7 +205,14 @@ def get_epp():
 
 def set_epp(pref):
     if pref in EPP_PREFERENCES:
-        subprocess.run(f"for i in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do [ -f \"$i\" ] && echo {pref} > \"$i\"; done", shell=True)
+        for i in glob.glob("/sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference"):
+            if os.path.isfile(i):
+                set_sys_val(i, pref)
+
+def set_governor(gov):
+    for i in glob.glob("/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor"):
+        if os.path.isfile(i):
+            set_sys_val(i, gov)
 
 ASPM_POLICIES = ["default", "performance", "powersave", "powersupersave"]
 
@@ -191,22 +228,15 @@ def set_aspm_policy(policy):
         set_sys_val("/sys/module/pcie_aspm/parameters/policy", policy)
 
 # Hyprland Signature and Control Helpers
-def get_hypr_signature():
-    paths = glob.glob("/run/user/1000/hypr/*_*")
-    if paths:
-        return os.path.basename(paths[0])
-    paths = glob.glob("/tmp/hypr/*_*")
-    if paths:
-        return os.path.basename(paths[0])
-    return ""
+def is_hyprland():
+    return run("pgrep -x Hyprland") != ""
 
 def run_hyprctl(cmd_args):
-    sig = get_hypr_signature()
-    if sig:
-        cmd = f"sudo -u {REAL_USER} XDG_RUNTIME_DIR=/run/user/{USER_ID} HYPRLAND_INSTANCE_SIGNATURE={sig} hyprctl {cmd_args}"
-    else:
-        cmd = f"sudo -u {REAL_USER} XDG_RUNTIME_DIR=/run/user/{USER_ID} hyprctl {cmd_args}"
-    return run(cmd)
+    if not is_hyprland(): return ""
+    user = os.environ.get("SUDO_USER", "")
+    if user and user != "root":
+        return run(f"su - {user} -c 'hyprctl {cmd_args}'")
+    return run(f"hyprctl {cmd_args}")
 
 def get_hypr_animations():
     out = run_hyprctl("getoption animations:enabled -j")
@@ -215,7 +245,6 @@ def get_hypr_animations():
         return data.get("bool", False) or data.get("int", 0) == 1
     except:
         return False
-
 
 def _get_main_monitor():
     try:
@@ -227,14 +256,68 @@ def _get_main_monitor():
         pass
     return "eDP-1"
 
-def _set_hypr_monitor(fps):
-    mon = _get_main_monitor()
-    run_hyprctl(f'eval \'hl.monitor({{ output = "{mon}", mode = "1920x1080@{fps}", position = "auto", scale = 1 }})\'')
+def get_monitor_refresh_rates():
+    rates = []
+    if is_hyprland():
+        try:
+            out = run_hyprctl("monitors -j")
+            data = json.loads(out)
+            for m in data:
+                if m.get("focused", False) or m.get("id", 0) == 0:
+                    for mode in m.get("availableModes", []):
+                        if "@" in mode:
+                            rates.append(float(mode.split("@")[1][:5]))
+                    break
+        except: pass
+    if not rates:
+        try:
+            out = run("xrandr")
+            for line in out.splitlines():
+                if "*" in line or "+" in line:
+                    parts = line.split()
+                    for p in parts[1:]:
+                        if p.replace('.', '').replace('*','').replace('+','').isdigit():
+                            rates.append(float(p.replace('*','').replace('+','')))
+        except: pass
+    if not rates:
+        rates = [60.0]
+    return rates
+
+def set_refresh_rate(target):
+    rates = get_monitor_refresh_rates()
+    fps = max(rates) if target == "max" else min(rates) if target == "min" else target
+    if is_hyprland():
+        mon = _get_main_monitor()
+        res = "1920x1080"
+        try:
+            out = run_hyprctl("monitors -j")
+            data = json.loads(out)
+            for m in data:
+                if m.get("name") == mon:
+                    res = f"{m.get('width', 1920)}x{m.get('height', 1080)}"
+        except: pass
+        run_hyprctl(f'eval \'hl.monitor({{ output = "{mon}", mode = "{res}@{fps}", position = "auto", scale = 1 }})\'')
+    else:
+        out = run("xrandr | grep ' connected'")
+        if out:
+            mon = out.split()[0]
+            run(f"xrandr --output {mon} --rate {fps}")
 
 def set_hypr_effects(enabled):
     val = "true" if enabled else "false"
     lua = f"hl.config({{ animations = {{ enabled = {val} }}, decoration = {{ blur = {{ enabled = {val} }}, shadow = {{ enabled = {val} }} }} }})"
     run_hyprctl(f"eval '{lua}'")
+
+# Helpers
+def _set_brightness_target(target):
+    max_b = int(run("brightnessctl m") or 100)
+    if target == 'max':
+        val = max_b
+    elif target == 'min':
+        val = 1
+    else:
+        val = int(max_b * target / 100)
+    subprocess.run(f"brightnessctl s {val}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 # WiFi Interface and Power Save Helpers
 def get_wifi_interface():
@@ -253,7 +336,7 @@ def set_wifi_powersave(s):
     iface = get_wifi_interface()
     if not iface: return
     val = "on" if s else "off"
-    subprocess.run(f"iw dev {iface} set power_save {val}", shell=True)
+    subprocess.run(f"iw dev {iface} set power_save {val}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 # Keyboard Backlight Helpers
 def _get_kbd_path():
@@ -322,7 +405,7 @@ def get_top_power_processes(cpu_w, screen_w, total_w):
 
 def get_current_mode():
     if os.path.exists(PID_FILE):
-        return "⚡ AUTO EXTREME (Dinámico)"
+        return "⚡ AUTO EXTREME (Dynamic)"
     
     epp = get_sys_val("/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference")
     no_turbo = "0" if _get_turbo() else "1"
@@ -331,13 +414,13 @@ def get_current_mode():
     active_cores = get_cores()
             
     if epp == "performance" and no_turbo == "0" and active_cores == num_cpus:
-        return "⚡ PERFORMANCE (Máximo)"
+        return "⚡ PERFORMANCE (Maximum)"
     elif epp == "power" and active_cores == 1:
-        return "🔋 EXTREME (Mínimo Fijo)"
+        return "🔋 EXTREME (Fixed Minimum)"
     elif epp == "balance_performance" or epp == "default":
-        return "♻  RESTAURAR (Balanceado)"
+        return "♻  RESTORE (Balanced)"
     else:
-        return "⚙  PERSONALIZADO / MANUAL"
+        return "⚙  CUSTOM / MANUAL"
 
 # --- GRAPHS DRAWING ENGINE ---
 class PowerDashboard:
@@ -367,7 +450,7 @@ class PowerDashboard:
             m = int((hours - h) * 60)
             time_str = f"{h}h {m}m"
         elif status.lower() == "charging":
-            time_str = "Cargando..."
+            time_str = "Charging..."
             charge_full_val = get_sys_val("/sys/class/power_supply/BAT0/charge_full")
             if charge_full_val and current > 0.01:
                 full = float(charge_full_val) / 10**6
@@ -376,13 +459,13 @@ class PowerDashboard:
                     hours = missing / current
                     h = int(hours)
                     m = int((hours - h) * 60)
-                    time_str = f"Cargando ({h}h {m}m)"
+                    time_str = f"Charging ({h}h {m}m)"
         elif status.lower() == "full":
-            time_str = "Lleno"
+            time_str = "Full"
 
         cpu_w = 0.0
-        rapl_path = f"{_get_rapl_path()}/energy_uj"
-        uj_val = get_sys_val(rapl_path)
+        rapl_path = _get_rapl_path("long_term")
+        uj_val = get_sys_val(rapl_path.replace("_power_limit_uw", "_energy_uj")) if rapl_path else ""
         now_time = time.time()
         if uj_val:
             uj = int(uj_val)
@@ -505,6 +588,43 @@ class PowerDashboard:
 # --- PANEL CONTROLS ---
 
 # --- POWER MODES & DAEMON LOGIC ---
+DEFAULTS_FILE = "/tmp/power_center_defaults.json"
+
+def save_defaults_if_needed():
+    if not os.path.exists(DEFAULTS_FILE):
+        defaults = {
+            "cores": get_cores(),
+            "freq_limit": get_freq_limit(),
+            "gpu_limit": get_gpu_limit(),
+            "rapl_pl1": get_rapl_pl1(),
+            "rapl_pl2": get_rapl_pl2(),
+            "epp": get_epp(),
+            "aspm": get_aspm_policy(),
+            "turbo": _get_turbo(),
+            "refresh_rate": max(get_monitor_refresh_rates()),
+            "brightness": 50
+        }
+        try:
+            if is_hyprland():
+                out = run_hyprctl("monitors -j")
+                data = json.loads(out)
+                defaults["refresh_rate"] = data[0].get("refreshRate", 60.0)
+        except: pass
+        
+        try:
+            with open(DEFAULTS_FILE, "w") as f:
+                json.dump(defaults, f)
+        except: pass
+
+def get_default_value(key, fallback):
+    if os.path.exists(DEFAULTS_FILE):
+        try:
+            with open(DEFAULTS_FILE, "r") as f:
+                data = json.load(f)
+                return data.get(key, fallback)
+        except: pass
+    return fallback
+
 def stop_daemon():
     if os.path.exists(PID_FILE):
         try:
@@ -516,348 +636,491 @@ def stop_daemon():
         os.remove(PID_FILE)
 
 def apply_mode_performance():
+    save_defaults_if_needed()
     stop_daemon()
-    set_hypr_effects(True)
-    _set_hypr_monitor(60)
+    set_refresh_rate("max")
     set_cores(get_num_cpus())
-    set_rapl_pl1(45)
-    set_rapl_pl2(65)
+    min_cpu, max_cpu = get_cpu_freq_bounds()
+    set_freq_limit(max_cpu)
+    min_w, max_w = get_rapl_bounds()
+    set_rapl_pl1(max_w)
+    set_rapl_pl2(max_w)
     set_epp("performance")
+    set_aspm_policy("performance")
     _set_turbo(True)
-    subprocess.run("brightnessctl set 100%", shell=True)
+    min_gpu, max_gpu = get_gpu_bounds()
+    set_gpu_limit(max_gpu)
+    _set_brightness_target("max")
     set_kbd_backlight(True)
+    run("rfkill unblock wifi")
     set_wifi_powersave(False)
-    subprocess.run("rfkill unblock bluetooth", shell=True)
+    run("rfkill unblock bluetooth")
+    _set_audio_powersave(False)
+    for p in __import__("glob").glob("/sys/bus/pci/devices/*/power/control"): set_sys_val(p, "on")
+    for p in __import__("glob").glob("/sys/bus/usb/devices/*/power/control"): set_sys_val(p, "on")
+    set_sys_val("/proc/sys/kernel/nmi_watchdog", "1")
+    set_sys_val("/proc/sys/vm/dirty_writeback_centisecs", 500)
+    set_sys_val("/proc/sys/vm/dirty_expire_centisecs", 500)
 
 def apply_mode_extreme():
+    import glob
+    save_defaults_if_needed()
     stop_daemon()
-    set_hypr_effects(False)
-    _set_hypr_monitor(48)
+    set_refresh_rate("min")
     set_cores(1)
-    set_rapl_pl1(5)
-    set_rapl_pl2(8)
+    set_governor("powersave")
+    min_gpu, max_gpu = get_gpu_bounds()
+    set_gpu_limit(min_gpu)
+    min_w, max_w = get_rapl_bounds()
+    set_rapl_pl1(min_w)
+    set_rapl_pl2(min_w)
     set_epp("power")
     _set_turbo(False)
-    set_freq_limit(800)
-    subprocess.run("brightnessctl set 2%", shell=True)
+    min_cpu, max_cpu = get_cpu_freq_bounds()
+    set_freq_limit(min_cpu)
+    _set_brightness_target("min")
     set_kbd_backlight(False)
     set_wifi_powersave(True)
-    subprocess.run("rfkill block bluetooth", shell=True)
+    subprocess.run("rfkill block bluetooth", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     _set_audio_powersave(True)
-    subprocess.run("echo 0 > /proc/sys/kernel/nmi_watchdog", shell=True)
+    set_sys_val("/proc/sys/kernel/nmi_watchdog", "0")
     set_aspm_policy("powersupersave")
-    subprocess.run("for i in /sys/bus/pci/devices/*/power/control; do echo auto > $i 2>/dev/null; done", shell=True)
-    subprocess.run("for i in /sys/bus/usb/devices/*/power/control; do echo auto > $i 2>/dev/null; done", shell=True)
+    for p in glob.glob("/sys/bus/pci/devices/*/power/control"): set_sys_val(p, "auto")
+    for p in glob.glob("/sys/bus/usb/devices/*/power/control"): set_sys_val(p, "auto")
+    set_sys_val("/proc/sys/vm/dirty_writeback_centisecs", "15000")
+    set_sys_val("/proc/sys/vm/dirty_expire_centisecs", "15000")
+    subprocess.Popen("systemctl stop tlp auto-cpufreq power-profiles-daemon thermald system76-power >/dev/null 2>&1; killall -q tlp auto-cpufreq thermald system76-power >/dev/null 2>&1", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def apply_mode_restore():
     stop_daemon()
-    set_hypr_effects(True)
-    _set_hypr_monitor(60)
-    set_cores(get_num_cpus())
-    set_rapl_pl1(15)
-    set_rapl_pl2(28)
-    set_epp("balance_performance")
-    _set_turbo(True)
-    set_freq_limit(2400)
-    subprocess.run("brightnessctl set 50%", shell=True)
+    set_refresh_rate(get_default_value("refresh_rate", 60.0))
+    
+    set_cores(get_default_value("cores", get_num_cpus()))
+    set_governor("powersave")
+    set_epp(get_default_value("epp", "balance_performance"))
+    _set_turbo(get_default_value("turbo", True))
+    set_freq_limit(get_default_value("freq_limit", 9999)) 
+    set_gpu_limit(get_default_value("gpu_limit", 9999))
+    
+    set_rapl_pl1(get_default_value("rapl_pl1", 28)) 
+    set_rapl_pl2(get_default_value("rapl_pl2", 28))
+    
+    _set_brightness_target(get_default_value("brightness", 50))
     set_kbd_backlight(True)
-    set_wifi_powersave(False)
-    set_aspm_policy("default")
+    
+    run("rfkill unblock wifi")
+    set_wifi_powersave(True)
+    run("rfkill unblock bluetooth")
+    
+    _set_audio_powersave(True)
+    set_aspm_policy(get_default_value("aspm", "default"))
+    
+    for p in glob.glob("/sys/bus/pci/devices/*/power/control"): set_sys_val(p, "auto")
+    for p in glob.glob("/sys/bus/usb/devices/*/power/control"): set_sys_val(p, "auto")
+    
+    set_sys_val("/proc/sys/kernel/nmi_watchdog", "1")
+    set_sys_val("/proc/sys/vm/dirty_writeback_centisecs", "500")
+    set_sys_val("/proc/sys/vm/dirty_expire_centisecs", "3000")
 
 def apply_mode_autoextreme():
     stop_daemon()
-    subprocess.run(f"python3 {os.path.abspath(__file__)} daemon &", shell=True)
+    subprocess.run(f"python3 {os.path.abspath(__file__)} daemon &", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def daemon_loop():
     with open(PID_FILE, 'w') as f:
         f.write(str(os.getpid()))
         
-    set_hypr_effects(False)
-    _set_hypr_monitor(48)
-    subprocess.run("brightnessctl set 2%", shell=True)
-    set_kbd_backlight(False)
-    set_rapl_pl1(6)
-    set_rapl_pl2(9)
+    # Start by initializing the system to absolute dynamic minimums
+    min_cpu, hw_max_cpu = get_cpu_freq_bounds()
+    max_cpu = int(min_cpu + (hw_max_cpu - min_cpu) * 0.4)
+    
+    min_gpu, hw_max_gpu = get_gpu_bounds()
+    max_gpu = int(min_gpu + (hw_max_gpu - min_gpu) * 0.4)
+    
+    min_w, hw_max_w = get_rapl_bounds()
+    max_w = int(min_w + (hw_max_w - min_w) * 0.4)
+    
+    max_cores = max(1, get_num_cpus() // 2)
+
+    set_cores(1)
+    set_freq_limit(min_cpu)
+    set_gpu_limit(min_gpu)
+    set_rapl_pl1(min_w)
+    set_rapl_pl2(min_w)
     set_epp("power")
     _set_turbo(False)
-    set_wifi_powersave(True)
-    subprocess.run("rfkill block bluetooth", shell=True)
     set_aspm_policy("powersupersave")
-    subprocess.run("echo 1500 > /proc/sys/vm/dirty_writeback_centisecs", shell=True)
-    subprocess.run("echo 1500 > /proc/sys/vm/dirty_expire_centisecs", shell=True)
-    
-    total_cpus = get_num_cpus()
-    
-    import time
-    while True:
+    set_wifi_powersave(True)
+
+    power_level = 0.0
+
+    def get_cpu_times():
         try:
-            load = float(run("cat /proc/loadavg | awk '{print $1}'") or 0.5)
-            
-            if load < 0.8:
-                target_cores, target_freq = 1, 800
-            elif load < 1.5:
-                target_cores, target_freq = 2, 1000
-            elif load < 3.0:
-                target_cores, target_freq = 3, 1200
-            else:
-                target_cores, target_freq = 4, 1400
-                
-            set_cores(target_cores)
-            set_freq_limit(target_freq)
-            
-            active_win = ""
+            with open('/proc/stat', 'r') as f:
+                parts = [float(x) for x in f.readline().split()[1:]]
+            return parts[3] + parts[4], sum(parts)
+        except:
+            return 0.0, 0.0
+
+    is_hypr = is_hyprland()
+
+    def get_active_window_class():
+        if is_hypr:
             try:
                 out = run_hyprctl("activewindow -j")
                 data = json.loads(out)
-                active_win = data.get("class", "").lower()
+                return data.get("class", "").lower()
             except:
                 pass
+        else:
+            try:
+                out = run("xdotool getactivewindow getwindowclassname")
+                return out.lower()
+            except:
+                pass
+        return ""
+
+    last_idle, last_total = get_cpu_times()
+
+    last_cores = -1
+    last_cpu = -1
+    last_gpu = -1
+    last_rapl = -1
+    last_epp = ""
+    last_turbo = -1
+    last_brightness = -1
+
+    while True:
+        try:
+            time.sleep(3)
+            idle, total = get_cpu_times()
+            idle_delta = idle - last_idle
+            total_delta = total - last_total
+            last_idle, last_total = idle, total
             
-            max_bright = float(run("brightnessctl m") or 100)
-            if active_win in ["kitty", "foot", "alacritty", ""]:
-                target_pct = 15 if load > 1.5 else 10
+            cpu_usage = 0.0
+            if total_delta > 0:
+                cpu_usage = 1.0 - (idle_delta / total_delta)
+            
+            if cpu_usage > 0.4:
+                power_level = min(1.0, power_level + 0.4)
+            elif cpu_usage > 0.2:
+                power_level = min(1.0, power_level + 0.1)
             else:
-                if load > 2.0: target_pct = 30
-                elif load > 0.8: target_pct = 20
-                else: target_pct = 12
+                power_level = max(0.0, power_level - 0.05)
                 
-            target_val = int((max_bright * target_pct) / 100)
-            target_val = max(1, target_val)
+            target_cores = max(1, int(1 + power_level * (max_cores - 1)))
+            target_cpu = int(min_cpu + power_level * (max_cpu - min_cpu))
+            target_gpu = int(min_gpu + power_level * (max_gpu - min_gpu))
+            target_rapl = int(min_w + power_level * (max_w - min_w))
             
-            curr_bright = int(run("brightnessctl g") or 0)
-            if curr_bright != target_val:
-                subprocess.run(f"brightnessctl set {target_val}", shell=True)
+            win_class = get_active_window_class()
+            is_heavy_ui = any(x in win_class for x in ["chrome", "firefox", "brave", "zen", "code", "idea", "studio", "cursor"])
+            max_b = 30 if is_heavy_ui else 10
+            min_b = 5
+            target_brightness = max(min_b, min(max_b, int(min_b + power_level * (max_b - min_b))))
+            
+            if power_level < 0.3:
+                target_epp = "power"
+            elif power_level < 0.7:
+                target_epp = "balance_performance"
+            else:
+                target_epp = "performance"
                 
-            time.sleep(5)
+            target_turbo = power_level > 0.8
+            
+            if target_cores != last_cores:
+                set_cores(target_cores)
+                last_cores = target_cores
+                
+            if abs(target_cpu - last_cpu) >= 100 or last_cpu == -1:
+                set_freq_limit(target_cpu)
+                last_cpu = target_cpu
+                
+            if abs(target_gpu - last_gpu) >= 50 or last_gpu == -1:
+                set_gpu_limit(target_gpu)
+                last_gpu = target_gpu
+                
+            if abs(target_rapl - last_rapl) >= 1 or last_rapl == -1:
+                set_rapl_pl1(target_rapl)
+                set_rapl_pl2(target_rapl)
+                last_rapl = target_rapl
+                
+            if target_epp != last_epp:
+                set_epp(target_epp)
+                last_epp = target_epp
+                
+            if target_turbo != last_turbo:
+                _set_turbo(target_turbo)
+                last_turbo = target_turbo
+                
+            if abs(target_brightness - last_brightness) >= 5 or last_brightness == -1:
+                _set_brightness_target(target_brightness)
+                last_brightness = target_brightness
+            
         except Exception as e:
-            time.sleep(5)
+            time.sleep(3)
 
 OPTIONS = [
     {
-        "name": "Cores Activos",
+        "category": "CPU & COMPUTE",
+        "name": "Active Cores",
         "type": "value",
         "get": lambda: get_cores(),
         "set": lambda v, d: set_cores(v + d),
-        "desc": "Control físico de núcleos. Menos núcleos = Menos consumo base y calor.",
+        "desc": "Limiting cores saves a lot of battery but reduces multi-tasking performance.",
         "safety": "SAFE"
     },
     {
-        "name": "Freq CPU (MHz)",
+        "category": "CPU & COMPUTE",
+        "name": "CPU Freq (MHz)",
         "type": "value",
         "get": lambda: get_freq_limit(),
         "set": lambda v, d: set_freq_limit(v + (d * 100)),
-        "desc": "Límite máximo de frecuencia. 800-1200MHz es ideal para ahorro extremo.",
+        "desc": "Maximum processor frequency. Reducing this saves a massive amount of energy.",
         "safety": "SAFE"
     },
     {
-        "name": "EPP CPU Profile",
+        "category": "CPU & COMPUTE",
+        "name": "Energy Perf Pref",
         "type": "value",
         "get": lambda: get_epp(),
         "set": lambda v, d: set_epp(EPP_PREFERENCES[(EPP_PREFERENCES.index(v) + d) % len(EPP_PREFERENCES)]),
-        "desc": "Preferencias de energía y rendimiento del hardware de la CPU. 'power' es ultra ahorrativo.",
+        "desc": "Energy Performance Preference (EPP). 'power' forces the processor to be as efficient as possible.",
         "safety": "SAFE"
     },
     {
+        "category": "POWER LIMITS",
         "name": "RAPL PL1 (W)",
         "type": "value",
         "get": lambda: get_rapl_pl1(),
         "set": lambda v, d: set_rapl_pl1(v + d),
-        "desc": "Límite de energía a largo plazo (PL1) para la CPU. 10W ideal en batería.",
+        "desc": "Sustained power limit (PL1).",
         "safety": "SAFE"
     },
     {
+        "category": "POWER LIMITS",
         "name": "RAPL PL2 (W)",
         "type": "value",
         "get": lambda: get_rapl_pl2(),
         "set": lambda v, d: set_rapl_pl2(v + d),
-        "desc": "Límite de energía a corto plazo (PL2) para la CPU. 15W ideal en batería.",
+        "desc": "Turbo power limit (PL2). Restricting it prevents massive heat spikes.",
         "safety": "SAFE"
     },
     {
+        "category": "POWER LIMITS",
         "name": "PCIe ASPM Policy",
         "type": "value",
         "get": lambda: get_aspm_policy(),
         "set": lambda v, d: set_aspm_policy(ASPM_POLICIES[(ASPM_POLICIES.index(v) + d) % len(ASPM_POLICIES)]),
-        "desc": "Active State Power Management de PCIe. 'powersupersave' ahorra más energía.",
+        "desc": "PCIe Active State Power Management. 'powersupersave' saves more energy.",
         "safety": "SAFE"
     },
     {
+        "category": "CPU & COMPUTE",
         "name": "Turbo Boost",
         "type": "toggle",
         "get": lambda: _get_turbo(),
         "set": lambda s: _set_turbo(s),
-        "desc": "Desactivar Turbo evita picos de calor y consumo masivo instantáneo.",
+        "desc": "Disabling Turbo prevents heat spikes and massive instant consumption.",
         "safety": "WARN"
     },
     {
+        "category": "GPU & DISPLAY",
         "name": "Freq iGPU (MHz)",
         "type": "value",
         "get": lambda: get_gpu_limit(),
         "set": lambda v, d: set_gpu_limit(v + (d * 50)),
-        "desc": "Límite de la gráfica integrada. Reducir ahorra energía en Hyprland.",
+        "desc": "Integrated graphics limit. Reducing it saves energy.",
         "safety": "SAFE"
     },
     {
-        "name": "Brillo LCD (%)",
+        "category": "GPU & DISPLAY",
+        "name": "LCD Brightness (%)",
         "type": "value",
         "get": lambda: int((int(run("brightnessctl g"))/int(run("brightnessctl m")))*100) if run("brightnessctl m") else 0,
-        "set": lambda v, d: subprocess.run(f"brightnessctl s {5 if d > 0 else -5}%", shell=True),
-        "desc": "El panel es el mayor consumidor tras la CPU. Mantener bajo el 10%.",
+        "set": lambda v, d: subprocess.run(f"brightnessctl s {5 if d > 0 else -5}%", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL),
+        "desc": "The panel is the biggest consumer after the CPU. Keep below 10%.",
         "safety": "SAFE"
     },
     {
-        "name": "Luz Teclado",
+        "category": "RADIOS & PERIPHERALS",
+        "name": "Keyboard Light",
         "type": "toggle",
         "get": lambda: get_kbd_backlight(),
         "set": lambda s: set_kbd_backlight(s),
-        "desc": "Apagar la retroiluminación del teclado ahorra una pequeña fracción de vatio.",
+        "desc": "Turning off keyboard backlight saves a tiny fraction of a watt.",
         "safety": "SAFE"
     },
     {
-        "name": "Efectos Hyprland",
-        "type": "toggle",
-        "get": lambda: get_hypr_animations(),
-        "set": lambda s: set_hypr_effects(s),
-        "desc": "Desactivar animaciones y blur libera a la GPU de trabajo innecesario.",
-        "safety": "SAFE"
-    },
-    {
+        "category": "HARDWARE & RADIOS",
         "name": "Bluetooth",
         "type": "toggle",
         "get": lambda: "Soft blocked: no" in run("rfkill list bluetooth"),
-        "set": lambda s: subprocess.run(f"rfkill {'unblock' if s else 'block'} bluetooth", shell=True),
-        "desc": "Corte de radio Bluetooth. Evita que el chip busque dispositivos.",
+        "set": lambda s: subprocess.run(f"rfkill {'unblock' if s else 'block'} bluetooth", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL),
+        "desc": "Bluetooth radio cut off. Prevents the chip from scanning for devices.",
         "safety": "SAFE"
     },
     {
-        "name": "WiFi Radio",
+        "category": "HARDWARE & RADIOS",
+        "name": "WiFi Enable",
         "type": "toggle",
-        "get": lambda: "enabled" in run("nmcli radio wifi"),
-        "set": lambda s: subprocess.run(f"nmcli radio wifi {'on' if s else 'off'}", shell=True),
-        "desc": "Apagar la radio WiFi por completo. Ahorro masivo si no necesita internet.",
-        "safety": "WARN"
+        "get": lambda: "Soft blocked: no" in run("rfkill list wifi"),
+        "set": lambda s: subprocess.run(f"rfkill {'unblock' if s else 'block'} wifi", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL),
+        "desc": "Toggle WiFi radio (rfkill). Disable to save constant radio polling energy.",
+        "safety": "SAFE"
     },
     {
+        "category": "HARDWARE & RADIOS",
         "name": "WiFi Power Save",
         "type": "toggle",
         "get": lambda: get_wifi_powersave(),
         "set": lambda s: set_wifi_powersave(s),
-        "desc": "Activa el modo de ahorro de energía de la tarjeta WiFi. Reduce el consumo pero puede elevar la latencia.",
+        "desc": "Enables WiFi card power saving mode. Reduces consumption but may increase latency.",
         "safety": "SAFE"
     },
     {
+        "category": "HARDWARE & RADIOS",
         "name": "Audio Power Save",
         "type": "toggle",
         "get": lambda: _get_audio_powersave(),
         "set": lambda s: _set_audio_powersave(s),
-        "desc": "Suspende el chip de audio tras 1s de inactividad. Evita 'pop' de estática.",
+        "desc": "Suspends the audio chip after 1s of inactivity. Prevents static 'pop'.",
         "safety": "SAFE"
     },
     {
+        "category": "SYSTEM ACTIONS",
         "name": "Autosuspend PCI/USB",
         "type": "toggle",
         "get": lambda: "auto" in run("cat /sys/bus/pci/devices/*/power/control 2>/dev/null | head -n 1"),
-        "set": lambda s: [subprocess.run(f"for i in /sys/bus/pci/devices/*/power/control; do echo {'auto' if s else 'on'} > \"$i\" 2>/dev/null; done", shell=True), subprocess.run(f"for i in /sys/bus/usb/devices/*/power/control; do echo {'auto' if s else 'on'} > \"$i\" 2>/dev/null; done", shell=True)],
-        "desc": "Suspende puertos USB y líneas PCIe inactivas. Puede afectar periféricos.",
+        "set": lambda s: [set_sys_val(p, "auto" if s else "on") for p in glob.glob("/sys/bus/pci/devices/*/power/control")] + [set_sys_val(p, "auto" if s else "on") for p in glob.glob("/sys/bus/usb/devices/*/power/control")],
+        "desc": "Suspends inactive USB ports and PCIe lines. May affect peripherals.",
         "safety": "DANGER"
     },
     {
+        "category": "SYSTEM ACTIONS",
         "name": "Watchdog Kernel",
         "type": "toggle",
         "get": lambda: get_sys_val("/proc/sys/kernel/nmi_watchdog") == "1",
         "set": lambda s: set_sys_val("/proc/sys/kernel/nmi_watchdog", "1" if s else "0"),
-        "desc": "Desactivar interrupciones de seguridad del kernel. Reduce wakeups de CPU.",
+        "desc": "Disable kernel safety interrupts. Reduces CPU wakeups.",
         "safety": "WARN"
     },
     {
+        "category": "SYSTEM ACTIONS",
         "name": "VM Writeback (s)",
         "type": "value",
         "get": lambda: int(get_sys_val("/proc/sys/vm/dirty_writeback_centisecs") or 500) // 100,
         "set": lambda v, d: [set_sys_val("/proc/sys/vm/dirty_writeback_centisecs", max(1, v + d) * 100), set_sys_val("/proc/sys/vm/dirty_expire_centisecs", max(1, v + d) * 100)],
-        "desc": "Intervalo de guardado de disco virtual. Valores altos reducen el uso del SSD.",
+        "desc": "Virtual disk writeback interval. High values reduce SSD usage.",
         "safety": "WARN"
     },
     {
-        "name": "Purga de Procesos",
+        "category": "SYSTEM ACTIONS",
+        "name": "Process Purge",
         "type": "action",
-        "exec": lambda: subprocess.run("pkill -f 'brave|discord|telegram|code|electron'", shell=True),
-        "desc": "Cierra aplicaciones pesadas (Brave, Code, Discord, etc) para liberar RAM y CPU.",
+        "exec": lambda: subprocess.run("pkill -f 'brave|discord|telegram|code|electron'", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL),
+        "desc": "Closes heavy applications (Brave, Code, Discord, etc.) to free up RAM and CPU.",
         "safety": "DANGER"
     },
     {
-        "name": "⚡ MODO PERFORMANCE",
+        "category": "POWER PROFILES",
+        "name": "⚡ PERFORMANCE MODE",
         "type": "action",
         "exec": apply_mode_performance,
-        "desc": "TURBO BOOST + todos los cores + freq máxima + GPU máxima. Consumo elevado.",
+        "desc": "TURBO BOOST + all cores + max freq + max GPU. High consumption.",
         "safety": "WARN"
     },
     {
-        "name": "🔋 MODO EXTREME",
+        "category": "POWER PROFILES",
+        "name": "🔋 EXTREME MODE",
         "type": "action",
         "exec": apply_mode_extreme,
-        "desc": "Solo 1 core a 800MHz, GPU mínima, todo apagado. Máximo ahorro de batería.",
+        "desc": "Absolute minimum hardware bounds. Minimum cores, min freq, min GPU. Maximum battery savings.",
         "safety": "WARN"
     },
     {
-        "name": "⚡ MODO AUTO EXTREME",
+        "category": "POWER PROFILES",
+        "name": "⚡ AUTO EXTREME MODE",
         "type": "action",
         "exec": apply_mode_autoextreme,
-        "desc": "Extreme baseline + regulación dinámica de cores (1-4) y freq (800-1400MHz) según carga. Super tacaño.",
+        "desc": "Extreme baseline + dynamic scaling proportional to your hardware bounds based on instant CPU load.",
         "safety": "SAFE"
     },
     {
-        "name": "♻  MODO RESTAURAR",
+        "category": "POWER PROFILES",
+        "name": "♻  RESTORE MODE",
         "type": "action",
         "exec": apply_mode_restore,
-        "desc": "Restaura valores predeterminados balanceados. 8 cores, freq normal, GPU normal.",
+        "desc": "Restores original system defaults captured at the first launch.",
         "safety": "SAFE"
     }
 ]
 
-# --- UNIFIED DASHBOARD INTERACTION ---
 def draw_view_menu(stdscr, idx, h, w):
-    # Stats header
     draw = get_power()
     bat = get_battery()
     temp = get_temp()
-    stdscr.addstr(2, 2, "ESTADO DEL SISTEMA:", curses.A_BOLD)
-    stdscr.addstr(3, 4, f"BATERÍA: {bat}%", curses.color_pair(2 if bat and int(bat) > 20 else 4))
-    stdscr.addstr(3, 20, f"CONSUMO: {draw:.2f}W", curses.color_pair(3))
+    stdscr.addstr(2, 2, "SYSTEM STATUS:", curses.A_BOLD)
+    stdscr.addstr(3, 4, f"BATTERY: {bat}%", curses.color_pair(2 if bat and int(bat) > 20 else 4))
+    stdscr.addstr(3, 20, f"CONSUMPTION: {draw:.2f}W", curses.color_pair(3))
     stdscr.addstr(3, 40, f"TEMP: {temp}°C", curses.color_pair(4 if temp.isdigit() and int(temp) > 80 else 3))
-    auto_status = "ACTIVE" if os.path.exists(PID_FILE) else "OFF"
+    
     stdscr.addstr(4, 4, f"CORES: {get_cores()}/{get_num_cpus()} | CPU: {get_freq_limit()}MHz | EPP: {get_epp()} | PL1: {get_rapl_pl1()}W")
-    stdscr.addstr(4, 75, f"AUTO-EXT: {auto_status}", curses.color_pair(2 if auto_status == "ACTIVE" else 4))
+    mode = get_current_mode()
+    mode_str = f" >>> PROFILE: {mode} <<< "
+    x_pos = max(4, w - len(mode_str) - 2)
+    try:
+        stdscr.addstr(4, x_pos, mode_str, curses.color_pair(6 if "AUTO" in mode else 2) | curses.A_REVERSE | curses.A_BOLD)
+    except:
+        pass
 
-    # Controls Menu
-    stdscr.addstr(6, 2, "CONTROLES DE HARDWARE (Usa Flechas / Enter):", curses.A_BOLD)
+    stdscr.addstr(6, 2, "HARDWARE CONTROLS (Use Arrows / Enter):", curses.A_BOLD | curses.color_pair(6))
+    
+    y = 8
+    current_cat = None
+    
     for i, opt in enumerate(OPTIONS):
-        if 7 + i >= h - 6:
-            break
-        style = curses.color_pair(5) if i == idx else curses.A_NORMAL
+        if y >= h - 6: break
+            
+        cat = opt.get("category", "GENERAL")
+        if cat != current_cat:
+            current_cat = cat
+            stdscr.addstr(y, 2, f" {cat} ".center(w-4, "-"), curses.color_pair(1) | curses.A_BOLD)
+            y += 1
+            if y >= h - 6: break
+
+        is_selected = (i == idx)
+        style = curses.color_pair(6) | curses.A_REVERSE if is_selected else curses.A_NORMAL
+        prefix = " > " if is_selected else "   "
+        
         stdscr.attron(style)
-        stdscr.addstr(7 + i, 4, f" {opt['name']:20} ")
+        stdscr.addstr(y, 2, prefix + f"{opt['name']:23} ")
         stdscr.attroff(style)
 
         if opt["type"] == "value":
-            val = opt["get"]()
-            stdscr.addstr(f" [{str(val):<19}] ", curses.color_pair(3))
+            try: val = opt["get"]()
+            except: val = "ERR"
+            val_str = f" [{str(val):<19}] "
+            stdscr.addstr(val_str, curses.color_pair(3))
         elif opt["type"] == "toggle":
-            state = opt["get"]()
+            try: state = opt["get"]()
+            except: state = False
             color = curses.color_pair(2) if state else curses.color_pair(4)
-            stdscr.addstr(f" [{'ACTIVO' if state else 'OFF':<19}] ", color)
+            val_str = f" [{'ACTIVE' if state else 'OFF':<19}] "
+            stdscr.addstr(val_str, color)
         elif opt["type"] == "action":
-            stdscr.addstr(" [ EJECUTAR          ] ", curses.color_pair(4))
+            stdscr.addstr(" [ EXECUTE           ] ", curses.color_pair(6))
 
-        # Safety Tag
-        s_color = curses.color_pair(2) if opt["safety"] == "SAFE" else curses.color_pair(3) if opt["safety"] == "WARN" else curses.color_pair(4)
-        stdscr.addstr(f" {opt['safety']:>7}", s_color)
+        s_color = curses.color_pair(2) if opt.get("safety") == "SAFE" else curses.color_pair(3) if opt.get("safety") == "WARN" else curses.color_pair(4)
+        stdscr.addstr(f" {opt.get('safety', ''):>7}", s_color)
+        y += 1
 
-    # Explanation and quick footer
-    stdscr.addstr(h-5, 2, "─" * (w-4))
-    stdscr.addstr(h-4, 2, "EXPLICACIÓN:", curses.A_BOLD)
-    stdscr.addstr(h-3, 4, OPTIONS[idx]["desc"][:w-8], curses.A_ITALIC)
     try:
-        stdscr.addstr(h-1, 2, "[↑↓] Navegar | [←→] Ajustar | [ENTER] Acción | [Tab] Alternar Vista Monitor | [Q] Salir", curses.A_DIM)
+        stdscr.addstr(h-5, 2, "─" * (w-4))
+        stdscr.addstr(h-4, 2, "EXPLANATION:", curses.A_BOLD | curses.color_pair(6))
+        stdscr.addstr(h-3, 4, OPTIONS[idx].get("desc", "")[:w-8], curses.A_ITALIC)
+        stdscr.addstr(h-1, 2, "[↑↓] Navigate | [←→] Adjust | [ENTER] Change/Execute | [TAB] Change View | [R] Emergency Restore | [Q] Quit", curses.A_DIM)
     except:
         pass
 
@@ -868,11 +1131,9 @@ def main(stdscr):
         pass
     stdscr.nodelay(1)
     
-    # Shared settings
     delay_ms = 1000
     stdscr.timeout(delay_ms)
     
-    # Colors initialization
     try:
         curses.start_color()
         bg = curses.COLOR_BLACK
@@ -881,19 +1142,17 @@ def main(stdscr):
             bg = -1
         except:
             pass
-        
-        curses.init_pair(1, curses.COLOR_CYAN, bg)     # CPU / Titles / Header
-        curses.init_pair(2, curses.COLOR_GREEN, bg)    # Low / Efficient
-        curses.init_pair(3, curses.COLOR_YELLOW, bg)   # Medium / Warning
-        curses.init_pair(4, curses.COLOR_RED, bg)      # High / Danger
-        curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_CYAN)   # Title Highlight
-        curses.init_pair(6, curses.COLOR_BLUE, bg)     # Others component
+        curses.init_pair(1, curses.COLOR_CYAN, bg)
+        curses.init_pair(2, curses.COLOR_GREEN, bg)
+        curses.init_pair(3, curses.COLOR_YELLOW, bg)
+        curses.init_pair(4, curses.COLOR_RED, bg)
+        curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        curses.init_pair(6, curses.COLOR_BLUE, bg)
     except:
         pass
     
     dash = PowerDashboard()
     
-    # Mode tracker: 0 = Control Panel (power_center), 1 = Live Power Monitor
     import sys
     active_view = 0
     if len(sys.argv) > 1 and "--monitor" in sys.argv:
@@ -902,147 +1161,85 @@ def main(stdscr):
     
     while True:
         h, w = stdscr.getmaxyx()
-        
-        # Guard small screens
         if h < 18 or w < 78:
             stdscr.clear()
-            stdscr.addstr(h // 2, max(0, (w - 38) // 2), "Terminal muy pequeña. Agrándala para ver.", curses.color_pair(4) | curses.A_BOLD)
+            stdscr.addstr(h // 2, max(0, (w - 38) // 2), "Terminal too small.", curses.color_pair(4) | curses.A_BOLD)
             key = stdscr.getch()
-            if key == ord('q') or key == ord('Q'):
-                break
+            if key == ord('q') or key == ord('Q'): break
             time.sleep(0.2)
             continue
             
         stdscr.clear()
-        
-        # Common readings
         stats = dash.get_power_stats()
         dash.history.append(stats["total_w"])
         
-        # --- TITLE HEADER BAR ---
         stdscr.attron(curses.color_pair(5))
-        view_title = "PANEL DE CONTROL GENERAL" if active_view == 0 else f"MONITOR DE ENERGÍA EN VIVO ({delay_ms}ms)"
-        stdscr.addstr(0, 0, f" ⚡ POWER CENTER EXTREME | {view_title} | [Tab] Cambiar Vista ".center(w, " "))
+        view_title = "GENERAL CONTROL PANEL" if active_view == 0 else "ENERGY MONITOR"
+        stdscr.addstr(0, 0, f" ⚡ POWER CENTER EXTREME | {view_title} | [Tab] Change View | [R] Emergency Restore ".center(w, " "))
         stdscr.attroff(curses.color_pair(5))
         
-        # --- RENDER VIEW ---
         if active_view == 0:
-            # Control Panel View
             draw_view_menu(stdscr, menu_idx, h, w)
-            # Limit history queue growth
             dash.history = dash.history[-200:]
         else:
-            # Live Power Monitor View
             processes = get_top_power_processes(stats["cpu_w"], stats["screen_w"], stats["total_w"])
+            col1_w = min(55, max(40, int(w * 0.45)))
             
-            # Width and layout calculation
-            col1_w = int(w * 0.45)
-            col1_w = max(40, min(col1_w, 55))
-            graph_w = w - 6
-            available_cols = graph_w - 15
+            stdscr.addstr(2, 2, "POWER MODE:", curses.A_BOLD)
+            stdscr.addstr(2, 18, f" {get_current_mode()} ", curses.A_REVERSE)
             
-            # Keep history tailored for current window size
-            dash.history = dash.history[-max(600, available_cols * 2):]
+            stdscr.addstr(4, 2, f"CONSUMPTION: {stats['total_w']:6.2f} W", curses.A_BOLD)
             
-            # Column 1: Info Metrics
-            mode = get_current_mode()
-            stdscr.addstr(2, 2, "MODO DE ENERGÍA:", curses.A_BOLD)
-            stdscr.addstr(2, 18, f" {mode} ", curses.color_pair(2 if "AUTO" in mode or "REST" in mode else 3) | curses.A_REVERSE)
-            
-            stdscr.addstr(4, 2, f"Batería: {stats['capacity']}% [", curses.A_BOLD)
-            bar_w = 12
-            filled = int(stats["capacity"] / 100 * bar_w)
-            for i in range(bar_w):
-                if i < filled:
-                    color = curses.color_pair(2) if stats["capacity"] > 30 else curses.color_pair(3) if stats["capacity"] > 15 else curses.color_pair(4)
-                    stdscr.addstr("█", color)
-                else:
-                    stdscr.addstr("░", curses.A_DIM)
-            stdscr.addstr("]")
-            stdscr.addstr(f" {stats['status'][:4]}", curses.color_pair(2 if stats['status'] == 'Full' or stats['status'] == 'Charging' else 3))
-            stdscr.addstr(5, 2, f"⏱  {stats['time_str']} restante", curses.A_BOLD)
-            
-            total_color = curses.color_pair(2) if stats['total_w'] < 7.0 else curses.color_pair(3) if stats['total_w'] < 13.0 else curses.color_pair(4)
-            stdscr.addstr(7, 2, "CONSUMO PC:  ", curses.A_BOLD)
-            stdscr.addstr(7, 14, f"{stats['total_w']:6.2f} W", total_color | curses.A_BOLD)
-            stdscr.addstr(7, 24, f"({stats['voltage']:.1f}V | {stats['current']:.2f}A)", curses.A_DIM)
-
-            stdscr.addstr(9, 2, "🔌 CPU:      ", curses.A_BOLD)
-            stdscr.addstr(9, 14, f"{stats['cpu_w']:5.2f} W", curses.color_pair(1))
-            stdscr.addstr(10, 2, "🖥  Panel:    ", curses.A_BOLD)
-            stdscr.addstr(10, 14, f"{stats['screen_w']:5.2f} W", curses.color_pair(3))
-            stdscr.addstr(11, 2, "⚙  Otros HW:  ", curses.A_BOLD)
-            stdscr.addstr(11, 14, f"{stats['others_w']:5.2f} W", curses.color_pair(6))
-            
-            # Column 2: Processes
             proc_x = col1_w + 4
-            stdscr.addstr(2, proc_x, "PROCESOS CON MAYOR IMPACTO DE ENERGÍA:", curses.A_BOLD)
-            stdscr.addstr(3, proc_x, "  PID    %CPU   ESTIMADO (W)   COMMAND", curses.A_UNDERLINE | curses.A_DIM)
-            
+            stdscr.addstr(2, proc_x, "PROCESSES:", curses.A_BOLD)
             for idx, proc in enumerate(processes[:9]):
-                proc_name = proc["name"][:20]
-                row_y = 4 + idx
-                if row_y >= 13 or row_y >= h - 2:
-                    break
-                p_style = curses.color_pair(4) if proc["power"] > 4.0 else curses.color_pair(3) if proc["power"] > 1.5 else curses.A_NORMAL
-                stdscr.addstr(row_y, proc_x, f"{proc['pid']:>6} {proc['cpu']:>6}% {proc['power']:12.2f} W  {proc_name}", p_style)
-                
-            # Bottom graph
-            divider_y = 14
-            if h > divider_y + 4:
-                stdscr.addstr(divider_y, 2, "─" * (w - 4), curses.A_DIM)
-                graph_y = divider_y + 1
-                graph_h = h - graph_y - 2
-                
-                if graph_w > 10 and graph_h > 2:
-                    stdscr.addstr(graph_y + 1, 2, "GRÁFICO DE CONSUMO HISTÓRICO:", curses.A_BOLD)
-                    dash.draw_graph(stdscr, graph_y + 2, 2, graph_h - 2, graph_w, dash.history)
+                stdscr.addstr(4 + idx, proc_x, f"{proc['pid']:>6} {proc['cpu']:>6}% {proc['power']:12.2f} W  {proc['name'][:15]}")
             
-            try:
-                stdscr.addstr(h - 1, 2, f"Navegación: [Q] Salir | [+] Sumar tiempo (+100ms) | [-] Restar tiempo (-100ms) | [Tab] Volver al panel", curses.A_DIM)
-            except:
-                pass
-
-        # Keyboard Interactivity
+            if h > 16:
+                dash.draw_graph(stdscr, 14, 2, h - 16, w - 4, dash.history)
+        
         key = stdscr.getch()
+        if key == ord('q') or key == ord('Q'): break
+        elif key == ord('r') or key == ord('R'):
+            apply_mode_restore()
+            dash = PowerDashboard() # Reset dash history possibly, or just let it continue
+        elif key == 9: active_view = 1 - active_view
         
-        if key == curses.KEY_RESIZE:
-            continue
-            
-        if key == ord('q') or key == ord('Q'):
-            break
-        elif key == 9: # Tab key maps to decimal ASCII 9
-            # Toggle between views
-            active_view = 1 - active_view
-        
-        # View specific bindings
         if active_view == 0:
-            if key == curses.KEY_UP:
-                menu_idx = (menu_idx - 1) % len(OPTIONS)
-            elif key == curses.KEY_DOWN:
-                menu_idx = (menu_idx + 1) % len(OPTIONS)
+            if key == curses.KEY_UP: menu_idx = (menu_idx - 1) % len(OPTIONS)
+            elif key == curses.KEY_DOWN: menu_idx = (menu_idx + 1) % len(OPTIONS)
             elif key == curses.KEY_RIGHT:
                 o = OPTIONS[menu_idx]
-                if o["type"] == "value": o["set"](o["get"](), 1)
+                if o["type"] == "value": 
+                    try: stop_daemon(); o["set"](o["get"](), 1)
+                    except: pass
             elif key == curses.KEY_LEFT:
                 o = OPTIONS[menu_idx]
-                if o["type"] == "value": o["set"](o["get"](), -1)
+                if o["type"] == "value": 
+                    try: stop_daemon(); o["set"](o["get"](), -1)
+                    except: pass
             elif key in [10, 13, ord(' ')]:
                 o = OPTIONS[menu_idx]
-                if o["type"] == "toggle": o["set"](not o["get"]())
-                elif o["type"] == "action": o["exec"]()
-        else:
-            if key in [ord('+'), ord('='), 43, 61]:
-                delay_ms = min(5000, delay_ms + 100)
-                stdscr.timeout(delay_ms)
-            elif key in [ord('-'), ord('_'), 45, 95]:
-                delay_ms = max(100, delay_ms - 100)
-                stdscr.timeout(delay_ms)
-                
-    curses.endwin()
+                try:
+                    if o["type"] == "toggle": 
+                        stop_daemon()
+                        o["set"](not o["get"]())
+                    elif o["type"] == "action": 
+                        o["exec"]()
+                    elif o["type"] == "value":
+                        stop_daemon()
+                        o["set"](o["get"](), 1)
+                except:
+                    pass
+
 
 if __name__ == "__main__":
     import sys
+    if os.geteuid() != 0:
+        print("ERROR: Power Center Extreme requires root privileges to modify hardware states!")
+        print("Please run with: sudo power-center")
+        sys.exit(1)
+        
     if len(sys.argv) > 1:
         if sys.argv[1] == "daemon":
             if os.geteuid() != 0:
@@ -1051,9 +1248,6 @@ if __name__ == "__main__":
             daemon_loop()
             sys.exit(0)
         elif sys.argv[1] == "mode":
-            if os.geteuid() != 0:
-                print("Must run mode changes as root (sudo power-center mode <name>)")
-                sys.exit(1)
             mode = sys.argv[2] if len(sys.argv) > 2 else ""
             if mode == "performance": apply_mode_performance()
             elif mode == "extreme": apply_mode_extreme()

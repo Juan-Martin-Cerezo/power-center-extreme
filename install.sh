@@ -1,18 +1,22 @@
 #!/bin/bash
 
 if [[ $EUID -ne 0 ]]; then
-   echo "Por favor ejecuta la instalación como root (sudo ./install.sh)"
+   echo "Please run the installation as root (sudo ./install.sh)"
    exit 1
 fi
 
-echo "Instalando Power Center Extreme..."
+echo "Installing Power Center Extreme..."
+
+echo "Disabling power managers that may cause conflicts (tlp, auto-cpufreq, etc.)..."
+systemctl stop tlp auto-cpufreq power-profiles-daemon thermald system76-power 2>/dev/null
+systemctl disable tlp auto-cpufreq power-profiles-daemon thermald system76-power 2>/dev/null
 
 cp power-center.py /usr/local/bin/power-center
 chmod +x /usr/local/bin/power-center
 
-echo "Instalación completada."
-echo "Puedes ejecutar el programa simplemente escribiendo: power-center"
-echo "Otras opciones:"
+echo "Installation completed."
+echo "You can run the program by simply typing: power-center"
+echo "Other options:"
 echo "  sudo power-center mode performance"
 echo "  sudo power-center mode extreme"
 echo "  sudo power-center mode auto-extreme"
