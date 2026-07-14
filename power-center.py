@@ -754,34 +754,6 @@ def daemon_loop():
 
     power_level = 0.0
 
-    def get_cpu_times():
-        try:
-            with open('/proc/stat', 'r') as f:
-                parts = [float(x) for x in f.readline().split()[1:]]
-            return parts[3] + parts[4], sum(parts)
-        except:
-            return 0.0, 0.0
-
-    is_hypr = is_hyprland()
-
-    def get_active_window_class():
-        if is_hypr:
-            try:
-                out = run_hyprctl("activewindow -j")
-                data = json.loads(out)
-                return data.get("class", "").lower()
-            except:
-                pass
-        else:
-            try:
-                out = run("xdotool getactivewindow getwindowclassname")
-                return out.lower()
-            except:
-                pass
-        return ""
-
-    last_idle, last_total = get_cpu_times()
-
     last_cores = -1
     last_cpu = -1
     last_gpu = -1
@@ -792,33 +764,34 @@ def daemon_loop():
 
     while True:
         try:
-            time.sleep(3)
-            idle, total = get_cpu_times()
-            idle_delta = idle - last_idle
-            total_delta = total - last_total
-            last_idle, last_total = idle, total
+            time.sleep(10)
             
-            cpu_usage = 0.0
-            if total_delta > 0:
-                cpu_usage = 1.0 - (idle_delta / total_delta)
-            
-            if cpu_usage > 0.4:
-                power_level = min(1.0, power_level + 0.4)
-            elif cpu_usage > 0.2:
-                power_level = min(1.0, power_level + 0.1)
-            else:
-                power_level = max(0.0, power_level - 0.05)
+            try:
+                with open('/proc/loadavg', 'r') as f:
+                    load = float(f.read().split()[0])
+            except:
+                load = 0.0
                 
-            # Round to nearest 20% step to prevent ANY micro-adjustments across all values
-            discrete_power = round(power_level * 5) / 5.0
+            # Map the 1-minute load average to a 0.0 - 1.0 scale based on total cores
+            power_level = min(1.0, load / get_num_cpus())
+            
+            # Quantize to just 4 giant steps: 0%, 33%, 66%, 100%
+            # This makes the system incredibly resistant to changes.
+            discrete_power = round(power_level * 3) / 3.0
             
             target_cores = max(1, int(1 + discrete_power * (max_cores - 1)))
             target_cpu = int(min_cpu + discrete_power * (max_cpu - min_cpu))
             target_gpu = int(min_gpu + discrete_power * (max_gpu - min_gpu))
             target_rapl = int(min_w + discrete_power * (max_w - min_w))
             
-            win_class = get_active_window_class()
-            is_heavy_ui = any(x in win_class for x in ["chrome", "firefox", "brave", "zen", "code", "idea", "studio", "cursor"])
+            # Focus check only once every 10 seconds to save CPU
+            is_heavy_ui = False
+            if is_hyprland():
+                try:
+                    out = run_hyprctl("activewindow -j")
+                    win_class = json.loads(out).get("class", "").lower()
+                    is_heavy_ui = any(x in win_class for x in ["chrome", "firefox", "brave", "zen", "code", "idea", "studio", "cursor"])
+                except: pass
             max_b = 30 if is_heavy_ui else 10
             min_b = 5
             target_brightness = max(min_b, min(max_b, int(min_b + discrete_power * (max_b - min_b))))
@@ -862,7 +835,7 @@ def daemon_loop():
                 last_brightness = target_brightness
             
         except Exception as e:
-            time.sleep(3)
+            time.sleep(10)
 
 OPTIONS = [
     {
