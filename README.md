@@ -13,20 +13,21 @@ Designed from the ground up to be lightweight, efficient, and heavily optimized,
 
 ## 🚀 Installation & Usage
 
-### 1-Click Installation (No Git or Go required)
-We provide pre-compiled binaries for all major operating systems. You don't need to install any dependencies.
-Just download and run!
-
-1. Go to the [Releases page](https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/latest)
-2. Download the appropriate binary for your system (Windows, macOS, or Linux).
-3. Make it executable (on Linux/macOS) and run it!
+### 1-Command Global Install (Linux / macOS)
+We provide pre-compiled binaries for all major operating systems. You don't need to install any dependencies like Go or Git.
+To install Power Center Extreme globally as a system application, run this single command:
 
 ```bash
-# Example for Linux AMD64
-wget https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/download/v1.0.0/power-center-linux-amd64
-chmod +x power-center-linux-amd64
-sudo ./power-center-linux-amd64
+# Download and install directly to /usr/local/bin
+sudo curl -L https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/download/v1.0.0/power-center-linux-amd64 -o /usr/local/bin/power-center && sudo chmod +x /usr/local/bin/power-center
 ```
+
+*Note: For macOS or ARM devices, change the URL in the command to the corresponding binary from the [Releases page](https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/latest).*
+
+### Windows Installation
+1. Go to the [Releases page](https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/latest).
+2. Download `power-center-windows-amd64.exe`.
+3. Open a Terminal or PowerShell as Administrator and run the executable.
 
 ### Run (After installing globally)
 Because the program directly controls hardware boundaries, run it with `sudo`:
