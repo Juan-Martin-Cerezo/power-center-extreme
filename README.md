@@ -13,26 +13,30 @@ Designed from the ground up to be lightweight, efficient, and heavily optimized,
 
 ## 🚀 Installation & Usage
 
-### 1. Prerequisites
-- [Go](https://golang.org/doc/install) 1.20 or higher.
-- `root` or `sudo` privileges (required to write to hardware `/sys/` interfaces).
+### 1-Command Automatic Install (Linux/macOS)
+The fastest way to install the program globally. It will download, compile, and place the executable in your system bin automatically. You just need Go installed.
+```bash
+curl -sL https://raw.githubusercontent.com/Juan-Martin-Cerezo/power-center-extreme/master/install.sh | bash
+```
 
-### 2. Build from Source
+### Manual Build from Source
+If you prefer to compile it manually:
 ```bash
 git clone https://github.com/Juan-Martin-Cerezo/power-center-extreme.git
 cd power-center-extreme
 go build -o power-center
+sudo ./power-center
 ```
 
-### 3. Run
+### Run (After installing globally)
 Because the program directly controls hardware boundaries, run it with `sudo`:
 ```bash
-sudo ./power-center
+sudo power-center
 ```
 
 **Run in Daemon Mode without UI:**
 ```bash
-sudo ./power-center --daemon
+sudo power-center --daemon
 ```
 
 ## ⌨️ TUI Controls
