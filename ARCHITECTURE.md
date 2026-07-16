@@ -1,25 +1,49 @@
-# VoltTamer Architecture & Design Decisions
+# System Architecture ⚙️
 
-This document serves as a persistent record of the core design philosophies and engineering decisions made during the development of VoltTamer, specifically focusing on the `Auto Extreme` mode and hardware-agnostic capabilities.
+Power Center Extreme uses a highly modular, decoupled architecture focused on performance, maintainability, and cross-platform compatibility.
 
-## 1. Hardware-Agnostic Philosophy
-- **Dynamic Bounds over Hardcoded Values:** The system must *never* rely on hardcoded hardware limits (e.g., assuming a CPU maxes at 4000MHz or minimums at 800MHz). 
-- **Proportional Scaling:** Instead of setting fixed values, the program calculates the absolute minimum and maximum bounds of the specific machine it is running on (using `get_cpu_freq_bounds`, `get_gpu_bounds`, `get_num_cpus`, etc.) and scales proportionally based on load.
+## Core Design Principles
 
-## 2. Auto Extreme Daemon - Core Mechanics
-The `Auto Extreme` mode is designed to be the ultimate battery-saving daemon without starving the user of performance when needed.
-- **Desensitization via `/proc/loadavg`:** To prevent the daemon from overreacting to micro-spikes (like opening a menu or compiling a single file), the daemon reads the 1-minute load average instead of instantaneous `/proc/stat`. This guarantees a "lazy" but deliberate scaling response.
-- **Quantized Power Steps:** The power scaling is strictly forced into 4 distinct levels (0%, 33%, 66%, 100%). This eliminates the possibility of micro-fluctuations (e.g., shifting from 800MHz to 850MHz back and forth). Hardware states are only modified if the system crosses these massive statistical thresholds.
-- **Fixed EPP in Auto Extreme:** Even under load, the Energy Performance Preference (EPP) is locked to `power` during Auto Extreme. This ensures the CPU's internal governor favors efficiency at all times, relying on our daemon to manually unlock cores and frequencies.
-- **Focus-Aware Brightness:** Brightness is scaled proportionally (10% to 30%), but the upper bound is only permitted if a "heavy" UI application (like Chrome, VSCode, Firefox) is currently focused, detected natively via `Hyprland` or `xdotool`.
+1. **Strict Decoupling**: The User Interface (`ui/`) has absolutely zero knowledge of how hardware limits are actually enforced. It merely calls interface methods.
+2. **Hardware Abstraction Layer (HAL)**: All hardware interactions are routed through a unified interface (`hal/backend.go`). This allows the system to easily adapt to Windows, macOS, or Linux.
+3. **No External Dependencies for Hardware**: We avoid third-party libraries for hardware access. On Linux, this is achieved by reading and writing directly to the kernel's `/sys/` pseudo-filesystem.
 
-## 3. Zero-Overhead Execution
-- **Native Python Writes:** The daemon completely avoids the use of `subprocess.run("echo ... > /sys/...")` or shell `for` loops. Creating subprocesses inside a tight loop causes severe CPU stress. Instead, VoltTamer uses native Python file I/O (`open().write()`) and `glob.glob()` to manipulate `/sys/` nodes. This results in virtually 0.00% CPU overhead during background monitoring and execution.
-- **Environment Caching:** Checks that require subprocesses (like `pgrep` to check if Hyprland is running) are executed exactly once when the daemon starts and cached in memory to avoid repetitive CPU spikes.
-- **Slow Polling:** The daemon sleeps for 10 seconds between checks. Combined with the 1-minute load average, the daemon is practically invisible to the CPU scheduler.
+## Directory Structure
 
-## 4. English Technical Standard
-All documentation, UI elements (Curses), and comments within the source code must strictly use Technical English to maintain a professional, open-source standard for the global community.
+```
+power-center-extreme/
+├── main.go               # Entry point, parses flags (like --daemon) and injects backend
+├── hal/                  # Hardware Abstraction Layer
+│   ├── backend.go        # Defines the `Backend` interface that all OS-specific files must implement
+│   ├── backend_linux.go  # Linux implementation using sysfs
+│   ├── backend_darwin.go # macOS stub implementation
+│   └── backend_windows.go# Windows stub implementation
+└── ui/                   # Terminal User Interface
+    └── cli.go            # Draws the TUI, manages state, handles user input using `tcell`
+```
 
----
-*Persisted for future agent contexts.*
+## How It Works
+
+### The Hardware Abstraction Layer (HAL)
+The `Backend` interface dictates what actions a platform *must* support, such as:
+- `GetNumCPUs() int`
+- `SetFreqLimit(mhz int)`
+- `GetBatteryPercentage() int`
+- `ApplyModeExtreme()`
+
+When the application boots, `hal.CurrentBackend` is populated automatically thanks to Go's build tags (`//go:build linux`). This means the `main.go` file doesn't even need to know what OS it is running on.
+
+### The User Interface (UI)
+The `ui.Dashboard` struct handles the presentation layer using `tcell`.
+It constructs a dynamic list of `MenuItem` objects, which wire up the UI text to the underlying `hal.Backend` methods.
+
+**Dynamic Layout Engine:**
+The UI dynamically detects terminal sizes on every redraw event:
+- If the terminal is wider than 130 columns, it splits the menu and the graph side-by-side.
+- If narrower, it stacks the graph on top of the menu and calculates visible list items, adding a visual scrollbar.
+
+### Auto Daemon
+The `hal` implementation contains a background process called the Auto Extreme Daemon. When triggered (either via UI or CLI `--daemon`), it spins up a Goroutine that wakes up every 10 seconds. It monitors:
+- Plugged in status (applies Maximum Performance).
+- Battery Critical status (applies Extreme Mode).
+- Normal Battery status (applies Default OS limits).
