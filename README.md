@@ -13,29 +13,61 @@ Designed from the ground up to be lightweight, efficient, and heavily optimized,
 
 ## 🚀 Installation & Usage
 
-### 1-Command Global Install (Linux / macOS)
-We provide pre-compiled binaries for all major operating systems. You don't need to install any dependencies like Go or Git.
-To install Power Center Extreme globally as a system application, run this single command:
+We provide pre-compiled binaries for all major operating systems. You **do not** need to install Go, Git, or compile anything yourself.
 
+### 🐧 Linux Installation
+
+To install Power Center Extreme globally as a system application, open your terminal and run this single command:
+
+**For Intel/AMD (64-bit):**
 ```bash
-# Download and install directly to /usr/local/bin
 sudo curl -L https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/download/v1.0.0/power-center-linux-amd64 -o /usr/local/bin/power-center && sudo chmod +x /usr/local/bin/power-center
 ```
 
-*Note: For macOS or ARM devices, change the URL in the command to the corresponding binary from the [Releases page](https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/latest).*
+**For ARM (Raspberry Pi, etc):**
+```bash
+sudo curl -L https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/download/v1.0.0/power-center-linux-arm64 -o /usr/local/bin/power-center && sudo chmod +x /usr/local/bin/power-center
+```
 
-### Windows Installation
-1. Go to the [Releases page](https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/latest).
-2. Download `power-center-windows-amd64.exe`.
-3. Open a Terminal or PowerShell as Administrator and run the executable.
-
-### Run (After installing globally)
-Because the program directly controls hardware boundaries, run it with `sudo`:
+**How to run (Linux):**
+Because the program directly controls hardware boundaries, simply run it anywhere with `sudo`:
 ```bash
 sudo power-center
 ```
 
-**Run in Daemon Mode without UI:**
+### 🪟 Windows Installation
+
+Windows users do not need to use the terminal. Just follow these steps:
+
+1. Go to the [Releases page](https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/latest).
+2. Download the `power-center-windows-amd64.exe` file.
+3. Save it to your Desktop or a folder of your choice.
+4. **Right-click** on the `.exe` file and select **"Run as administrator"**. 
+*(Administrator privileges are required to change system power profiles and frequencies).*
+
+### 🍎 macOS Installation
+
+macOS installation works similarly to Linux. Open the `Terminal` app and run:
+
+**For Apple Silicon (M1/M2/M3):**
+```bash
+sudo curl -L https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/download/v1.0.0/power-center-macos-arm64 -o /usr/local/bin/power-center && sudo chmod +x /usr/local/bin/power-center
+```
+
+**For Intel Macs:**
+```bash
+sudo curl -L https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/download/v1.0.0/power-center-macos-amd64 -o /usr/local/bin/power-center && sudo chmod +x /usr/local/bin/power-center
+```
+
+**How to run (macOS):**
+```bash
+sudo power-center
+```
+
+---
+
+### ⚙️ Background Daemon Mode
+If you want the application to automatically adjust power based on your battery percentage without keeping the UI open, run it in Daemon mode:
 ```bash
 sudo power-center --daemon
 ```
