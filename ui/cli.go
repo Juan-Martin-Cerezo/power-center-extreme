@@ -58,6 +58,34 @@ var blocks = []rune{' ', ' ', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
 
 // drawBarGraph renders the historical power consumption as an ASCII block graph
 func (d *Dashboard) drawBarGraph(startY, startX, height, width int, dataList []float64, maxValLabel float64) {
+	if len(dataList) == 0 { return }
+
+	graphMax := 15.0 // scale max
+	
+	// Draw axes
+	for yOffset := 0; yOffset < height; yOffset++ {
+		screenY := startY + height - 1 - yOffset
+		d.drawString(startX, screenY, tcell.StyleDefault.Foreground(tcell.ColorDarkGray), "│")
+	}
+	d.drawString(startX, startY+height, tcell.StyleDefault.Foreground(tcell.ColorDarkGray), "└" + strings.Repeat("─", width-14))
+
+	// Plot data
+	for i := 0; i < width-14; i++ {
+		dataIdx := len(dataList) - (width - 14) + i
+		if dataIdx < 0 || dataIdx >= len(dataList) { continue }
+		
+		val := dataList[dataIdx]
+		xPos := startX + 1 + i
+		
+		// Map value to row heights
+		ratio := val / graphMax
+		if ratio > 1.0 { ratio = 1.0 }
+		
+		totalDots := int(ratio * float64(height*8)) // 8 block levels per row
+		
+		for yOffset := 0; yOffset < height; yOffset++ {
+			screenY := startY + height - 1 - yOffset
+			dotsInRow := totalDots - (yOffset * 8)
 			charIdx := 0
 			if dotsInRow >= 8 {
 				charIdx = 8
@@ -66,7 +94,10 @@ func (d *Dashboard) drawBarGraph(startY, startX, height, width int, dataList []f
 			}
 			
 			if charIdx > 0 {
-				d.screen.SetContent(xPos, screenY, blocks[charIdx], nil, st)
+				color := tcell.ColorGreen
+				if yOffset > height/2 { color = tcell.ColorYellow }
+				if yOffset > height-2 { color = tcell.ColorRed }
+				d.screen.SetContent(xPos, screenY, blocks[charIdx], nil, tcell.StyleDefault.Foreground(color))
 			}
 		}
 	}

@@ -13,19 +13,19 @@ Designed from the ground up to be lightweight, efficient, and heavily optimized,
 
 ## 🚀 Installation & Usage
 
-### 1-Command Automatic Install (Linux/macOS)
-The fastest way to install the program globally. It will download, compile, and place the executable in your system bin automatically. You just need Go installed.
-```bash
-curl -sL https://raw.githubusercontent.com/Juan-Martin-Cerezo/power-center-extreme/master/install.sh | bash
-```
+### 1-Click Installation (No Git or Go required)
+We provide pre-compiled binaries for all major operating systems. You don't need to install any dependencies.
+Just download and run!
 
-### Manual Build from Source
-If you prefer to compile it manually:
+1. Go to the [Releases page](https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/latest)
+2. Download the appropriate binary for your system (Windows, macOS, or Linux).
+3. Make it executable (on Linux/macOS) and run it!
+
 ```bash
-git clone https://github.com/Juan-Martin-Cerezo/power-center-extreme.git
-cd power-center-extreme
-go build -o power-center
-sudo ./power-center
+# Example for Linux AMD64
+wget https://github.com/Juan-Martin-Cerezo/power-center-extreme/releases/download/v1.0.0/power-center-linux-amd64
+chmod +x power-center-linux-amd64
+sudo ./power-center-linux-amd64
 ```
 
 ### Run (After installing globally)

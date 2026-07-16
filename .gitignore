@@ -1,1 +1,4 @@
-__pycache__/
+build/
+power-center
+power-center.exe
+.agent_rules.md

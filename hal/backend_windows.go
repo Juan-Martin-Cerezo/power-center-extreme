@@ -119,3 +119,4 @@ func (b *WindowsBackend) ApplyModeRestore() {}
 func (b *WindowsBackend) StartAutoExtremeDaemon() {}
 // StopDaemon stops the background daemon
 func (b *WindowsBackend) StopDaemon() {}
+

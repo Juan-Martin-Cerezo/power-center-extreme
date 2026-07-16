@@ -119,3 +119,4 @@ func (b *DarwinBackend) ApplyModeRestore() {}
 func (b *DarwinBackend) StartAutoExtremeDaemon() {}
 // StopDaemon stops the background daemon
 func (b *DarwinBackend) StopDaemon() {}
+
