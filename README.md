@@ -14,24 +14,20 @@ In an era where operating systems and software abstractions often obscure direct
 
 We provide pre-compiled binaries for all major operating systems. 
 
-### 🐧 Linux Installation
+### 🐧 Linux & 🍎 macOS Installation
 
-*Note: Ensure you have `curl` installed on your system (e.g., `sudo apt install curl` on Ubuntu/Debian).*
+For Linux (Intel, AMD, or ARM) and macOS (Intel or Apple Silicon M1/M2/M3), you can install WattWarden automatically with a single command. Open your terminal and run:
 
-To install WattWarden globally as a system application, open your terminal and run this single command:
+*Note: Ensure you have `curl` or `wget` installed on your system (e.g., `sudo apt install curl` on Ubuntu/Debian).*
 
-**For Intel/AMD (64-bit):**
 ```bash
-sudo curl -L https://github.com/Juan-Martin-Cerezo/wattwarden/releases/download/v1.0.0/wattwarden-linux-amd64 -o /usr/local/bin/wattwarden && sudo chmod +x /usr/local/bin/wattwarden
+curl -fsSL https://raw.githubusercontent.com/Juan-Martin-Cerezo/wattwarden/main/install.sh | sudo bash
 ```
 
-**For ARM (Raspberry Pi, etc):**
-```bash
-sudo curl -L https://github.com/Juan-Martin-Cerezo/wattwarden/releases/download/v1.0.0/wattwarden-linux-arm64 -o /usr/local/bin/wattwarden && sudo chmod +x /usr/local/bin/wattwarden
-```
+This script will automatically detect your operating system and processor architecture, download the correct binary, and install it globally.
 
-**How to run (Linux):**
-Because the program directly controls hardware boundaries, simply run it anywhere with `sudo`:
+**How to run:**
+Because the program directly controls hardware boundaries, simply run it in your terminal with `sudo`:
 ```bash
 sudo wattwarden
 ```
@@ -45,25 +41,6 @@ Windows users do not need to use the terminal. Just follow these steps:
 3. Save it to your Desktop or a folder of your choice.
 4. **Right-click** on the `.exe` file and select **"Run as administrator"**. 
 *(Administrator privileges are required to change system power profiles and frequencies).*
-
-### 🍎 macOS Installation
-
-macOS installation works similarly to Linux. Open the `Terminal` app and run:
-
-**For Apple Silicon (M1/M2/M3):**
-```bash
-sudo curl -L https://github.com/Juan-Martin-Cerezo/wattwarden/releases/download/v1.0.0/wattwarden-macos-arm64 -o /usr/local/bin/wattwarden && sudo chmod +x /usr/local/bin/wattwarden
-```
-
-**For Intel Macs:**
-```bash
-sudo curl -L https://github.com/Juan-Martin-Cerezo/wattwarden/releases/download/v1.0.0/wattwarden-macos-amd64 -o /usr/local/bin/wattwarden && sudo chmod +x /usr/local/bin/wattwarden
-```
-
-**How to run (macOS):**
-```bash
-sudo wattwarden
-```
 
 ---
 
