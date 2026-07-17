@@ -115,4 +115,8 @@ func (b *DarwinBackend) ApplyModePerformance() {}
 func (b *DarwinBackend) ApplyModeExtreme() {}
 // ApplyModeRestore restores default settings
 func (b *DarwinBackend) ApplyModeRestore() {}
+// StartAutoExtremeDaemon starts auto adjustment daemon
+func (b *DarwinBackend) StartAutoExtremeDaemon() {}
+// StopDaemon stops the background daemon
+func (b *DarwinBackend) StopDaemon() {}
 

@@ -56,6 +56,8 @@ type Backend interface {
 	ApplyModePerformance() // Applies a High Performance profile to all hardware components
 	ApplyModeExtreme() // Applies the absolute minimum values to all hardware to maximize battery life
 	ApplyModeRestore() // Restores the hardware to its default factory/OS state
+	StartAutoExtremeDaemon() // Starts a background service that adapts the system to the user's load automatically
+	StopDaemon() // Stops the background daemon
 }
 
 // CurrentBackend holds the loaded backend implementation for the current Operating System
