@@ -16,8 +16,8 @@ power-center-extreme/
 ├── hal/                  # Hardware Abstraction Layer
 │   ├── backend.go        # Defines the `Backend` interface that all OS-specific files must implement
 │   ├── backend_linux.go  # Linux implementation using sysfs
-│   ├── backend_darwin.go # macOS stub implementation
-│   └── backend_windows.go# Windows stub implementation
+│   ├── backend_darwin.go # macOS native implementation (pmset)
+│   └── backend_windows.go# Windows native implementation (powercfg, WMI)
 └── ui/                   # Terminal User Interface
     └── cli.go            # Draws the TUI, manages state, handles user input using `tcell`
 ```
@@ -31,11 +31,11 @@ The `Backend` interface dictates what actions a platform *must* support, such as
 - `GetBatteryPercentage() int`
 - `ApplyModeExtreme()`
 
-When the application boots, `hal.CurrentBackend` is populated automatically thanks to Go's build tags (`//go:build linux`). This means the `main.go` file doesn't even need to know what OS it is running on.
+Cuando la aplicación arranca, `hal.CurrentBackend` es inyectado gracias a los build tags de Go (`//go:build linux`, `//go:build windows`, `//go:build darwin`). Esto significa que `main.go` y la Interfaz Gráfica (`ui/cli.go`) nunca necesitan saber en qué sistema operativo están corriendo.
 
 ### The User Interface (UI)
 The `ui.Dashboard` struct handles the presentation layer using `tcell`.
-It constructs a dynamic list of `MenuItem` objects, which wire up the UI text to the underlying `hal.Backend` methods.
+Contruye una lista de `MenuItem` que conecta la interfaz gráfica a los métodos de la interfaz `hal.Backend`. Dependiendo del OS devuelto por `b.GetOS()`, los menús ocultan opciones no soportadas nativamente por el SO anfitrión, garantizando que todos los botones funcionales hagan lo prometido sin generar errores silenciosos.
 
 **Dynamic Layout Engine:**
 The UI dynamically detects terminal sizes on every redraw event:
@@ -43,7 +43,6 @@ The UI dynamically detects terminal sizes on every redraw event:
 - If narrower, it stacks the graph on top of the menu and calculates visible list items, adding a visual scrollbar.
 
 ### Auto Daemon
-The `hal` implementation contains a background process called the Auto Extreme Daemon. When triggered (either via UI or CLI `--daemon`), it spins up a Goroutine that wakes up every 10 seconds. It monitors:
-- Plugged in status (applies Maximum Performance).
-- Battery Critical status (applies Extreme Mode).
-- Normal Battery status (applies Default OS limits).
+La implementación en `hal` posee un proceso en segundo plano (Goroutine) llamado "Auto Extreme Daemon". Cuando está habilitado, monitorea la carga en el CPU (loadavg en Unix/Mac o typeperf en Windows) cada 10 segundos.
+- Si está conectada a la corriente, aplica Máximo Rendimiento.
+- Si está con batería, calcula un factor normalizado matemático (`discretePower`), y ajusta los límites de hardware (brillo de pantalla, frecuencias, limits de acelerador) proporcionalmente a la carga de procesamiento, logrando un ahorro de batería ultra fino sin congelar la PC durante picos de trabajo.
