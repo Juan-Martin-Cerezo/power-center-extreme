@@ -138,6 +138,23 @@ func getBatteryPath() string {
 	return batteryPath
 }
 
+// parseUevent parses the battery's uevent properties file directly
+func parseUevent(batPath string) map[string]string {
+	m := make(map[string]string)
+	content, err := os.ReadFile(filepath.Join(batPath, "uevent"))
+	if err != nil {
+		return m
+	}
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			m[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+		}
+	}
+	return m
+}
+
 // GetBatteryPercentage returns the current battery level
 func (b *LinuxBackend) GetBatteryPercentage() int {
 	v, _ := strconv.Atoi(readSys(filepath.Join(getBatteryPath(), "capacity"))) // Read 0-100 percentage
@@ -160,31 +177,44 @@ func (b *LinuxBackend) GetBatteryTime() string {
 	energyStr := readSys(filepath.Join(bat, "energy_now")) // Attempt to read energy in micro-watt-hours
 	powerStr := readSys(filepath.Join(bat, "power_now")) // Attempt to read power in micro-watts
 	
-	if energyStr == "" || powerStr == "" { // If hardware reports in amps/charge instead
-		energyStr = readSys(filepath.Join(bat, "charge_now")) // Read micro-amp-hours
-		powerStr = readSys(filepath.Join(bat, "current_now")) // Read micro-amps
-		voltageStr := readSys(filepath.Join(bat, "voltage_now")) // Read micro-volts
+	if energyStr == "" || powerStr == "" { // Try parsing uevent
+		uevent := parseUevent(bat)
+		energyStr = uevent["POWER_SUPPLY_ENERGY_NOW"]
+		powerStr = uevent["POWER_SUPPLY_POWER_NOW"]
 		
-		if energyStr != "" && powerStr != "" && voltageStr != "" { // If all are available
-			e, _ := strconv.ParseFloat(energyStr, 64) // Convert to float
-			c, _ := strconv.ParseFloat(powerStr, 64) // Convert to float
-			v, _ := strconv.ParseFloat(voltageStr, 64) // Convert to float
+		if energyStr == "" || powerStr == "" { // If hardware reports in amps/charge instead
+			energyStr = uevent["POWER_SUPPLY_CHARGE_NOW"]
+			powerStr = uevent["POWER_SUPPLY_CURRENT_NOW"]
+			voltageStr := uevent["POWER_SUPPLY_VOLTAGE_NOW"]
 			
-			energy := e * (v / 1000000.0) // Calculate true energy
-			power := c * (v / 1000000.0) // Calculate true power
-			
-			if power > 0 { // If discharging
-				hours := energy / power // Calculate hours remaining
-				h := int(hours) // Extract full hours
-				m := int((hours - float64(h)) * 60) // Extract remaining minutes
-				return fmt.Sprintf("%dh %02dm", h, m) // Return formatted string
+			if energyStr == "" || powerStr == "" || voltageStr == "" {
+				energyStr = readSys(filepath.Join(bat, "charge_now"))
+				powerStr = readSys(filepath.Join(bat, "current_now"))
+				voltageStr = readSys(filepath.Join(bat, "voltage_now"))
 			}
+			
+			if energyStr != "" && powerStr != "" && voltageStr != "" { // If all are available
+				e, _ := strconv.ParseFloat(energyStr, 64) // Convert to float
+				c, _ := strconv.ParseFloat(powerStr, 64) // Convert to float
+				v, _ := strconv.ParseFloat(voltageStr, 64) // Convert to float
+				
+				energy := e * (v / 1000000.0) // Calculate true energy
+				power := math.Abs(c) * (v / 1000000.0) // Calculate true power
+				
+				if power > 0 { // If discharging
+					hours := energy / power // Calculate hours remaining
+					h := int(hours) // Extract full hours
+					m := int((hours - float64(h)) * 60) // Extract remaining minutes
+					return fmt.Sprintf("%dh %02dm", h, m) // Return formatted string
+				}
+			}
+			return "Calculating..." // Fallback
 		}
-		return "Calculating..." // Fallback
 	}
 	
 	energy, _ := strconv.ParseFloat(energyStr, 64) // Convert energy to float
 	power, _ := strconv.ParseFloat(powerStr, 64) // Convert power to float
+	power = math.Abs(power)
 	
 	if power > 0 { // If discharging
 		hours := energy / power // Calculate hours remaining
@@ -203,7 +233,7 @@ func (b *LinuxBackend) GetPowerConsumptionWatts() float64 {
 	// 1. Some systems expose power_now (microwatts) directly
 	if pStr := readSys(filepath.Join(bat, "power_now")); pStr != "" {
 		if pVal, err := strconv.ParseFloat(pStr, 64); err == nil {
-			return pVal / 1000000.0 // Convert microwatts to Watts
+			return math.Abs(pVal) / 1000000.0 // Convert microwatts to Watts
 		}
 	}
 	
@@ -213,7 +243,22 @@ func (b *LinuxBackend) GetPowerConsumptionWatts() float64 {
 	if cStr != "" && vStr != "" {
 		c, _ := strconv.ParseFloat(cStr, 64)
 		v, _ := strconv.ParseFloat(vStr, 64)
-		return (c * v) / 1000000000000.0 // Calculate and convert to Watts
+		return math.Abs(c * v) / 1000000000000.0 // Calculate and convert to Watts
+	}
+	
+	// 3. Last fallback: Parse uevent file directly (covers cases where sysfs exposes it in uevent but not separate files)
+	uevent := parseUevent(bat)
+	if pStr, ok := uevent["POWER_SUPPLY_POWER_NOW"]; ok && pStr != "" {
+		if pVal, err := strconv.ParseFloat(pStr, 64); err == nil {
+			return math.Abs(pVal) / 1000000.0
+		}
+	}
+	if cStr, ok := uevent["POWER_SUPPLY_CURRENT_NOW"]; ok && cStr != "" {
+		if vStr, ok := uevent["POWER_SUPPLY_VOLTAGE_NOW"]; ok && vStr != "" {
+			c, _ := strconv.ParseFloat(cStr, 64)
+			v, _ := strconv.ParseFloat(vStr, 64)
+			return math.Abs(c * v) / 1000000000000.0
+		}
 	}
 	
 	return 0.0
