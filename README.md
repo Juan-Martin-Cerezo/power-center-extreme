@@ -16,6 +16,8 @@ We provide pre-compiled binaries for all major operating systems.
 
 ### 🐧 Linux Installation
 
+*Note: Ensure you have `curl` installed on your system (e.g., `sudo apt install curl` on Ubuntu/Debian).*
+
 To install WattWarden globally as a system application, open your terminal and run this single command:
 
 **For Intel/AMD (64-bit):**
