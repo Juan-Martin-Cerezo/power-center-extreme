@@ -3,7 +3,7 @@
 # Terminate if any error occurs
 set -e
 
-VERSION="v1.0.0"
+VERSION="v1.0.1"
 REPO="Juan-Martin-Cerezo/wattwarden"
 INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="wattwarden"
