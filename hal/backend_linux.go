@@ -342,8 +342,7 @@ func (b *LinuxBackend) SetASPM(p string) {
 
 // GetWifiPowerSave checks if Wi-Fi power saving is on
 func (b *LinuxBackend) GetWifiPowerSave() bool {
-	ifaces := strings.Split(runCmd("iw dev | awk '$1=="Interface"{print $2}'"), "
-") // List all interfaces
+	ifaces := strings.Split(runCmd("iw dev | awk '$1==\"Interface\"{print $2}'"), "\n") // List all interfaces
 	for _, iface := range ifaces {
 		iface = strings.TrimSpace(iface) // Clean string
 		if iface != "" && strings.Contains(runCmd(fmt.Sprintf("iw dev %s get power_save", iface)), "on") { // Check state
@@ -361,8 +360,7 @@ func (b *LinuxBackend) SetWifiPowerSave(e bool) {
 	
 	iwState := "off" // Default command parameter
 	if e { iwState = "on" } // Command parameter for on
-	ifaces := strings.Split(runCmd("iw dev | awk '$1=="Interface"{print $2}'"), "
-") // List all interfaces
+	ifaces := strings.Split(runCmd("iw dev | awk '$1==\"Interface\"{print $2}'"), "\n") // List all interfaces
 	for _, iface := range ifaces {
 		iface = strings.TrimSpace(iface) // Clean string
 		if iface != "" {
@@ -523,7 +521,6 @@ func (b *LinuxBackend) ProcessPurge() {
 
 // ApplyModePerformance sets the system for maximum processing power at the cost of battery
 func (b *LinuxBackend) ApplyModePerformance() {
-	b.StopDaemon() // Stop auto adjustments
 	b.SetCores(b.GetNumCPUs()) // Turn on all cores
 	b.SetFreqLimit(99999) // Remove frequency limit
 	b.SetRAPLPL1(115) // Maximize package power
@@ -541,7 +538,6 @@ func (b *LinuxBackend) ApplyModePerformance() {
 
 // ApplyModeExtreme aggressively saves battery by turning almost everything off or to lowest settings
 func (b *LinuxBackend) ApplyModeExtreme() {
-	b.StopDaemon() // Stop auto adjustments
 	b.SetCores(2) // Run on only 2 cores
 	minMhz, _ := b.GetCPUFreqBounds()
 	b.SetFreqLimit(minMhz) // Lock to absolute lowest CPU frequency
@@ -564,7 +560,6 @@ func (b *LinuxBackend) ApplyModeExtreme() {
 
 // ApplyModeRestore resets the system back to typical factory OS defaults
 func (b *LinuxBackend) ApplyModeRestore() {
-	b.StopDaemon() // Stop auto adjustments
 	b.SetCores(b.GetNumCPUs()) // Ensure all cores are available
 	_, maxMhz := b.GetCPUFreqBounds()
 	b.SetFreqLimit(maxMhz) // Allow full frequency range
@@ -622,3 +617,9 @@ func (b *LinuxBackend) StartAutoExtremeDaemon() {
 		}
 	}()
 }
+
+func (b *LinuxBackend) SetBrightnessTarget(target string) {}
+func (b *LinuxBackend) SetRefreshRate(target string) {}
+func (b *LinuxBackend) SetHyprEffects(enabled bool) {}
+func (b *LinuxBackend) SetNMIWatchdog(enabled bool) {}
+func (b *LinuxBackend) SetVMDirty(writeback int, expire int) {}

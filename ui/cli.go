@@ -350,13 +350,13 @@ func buildMenuItems(d *Dashboard) []MenuItem {
 	return []MenuItem{
 		{IsHeader: true, Name: "─── [ PROFILES ] ───────────────────────"}, // Title
 		// Performance Mode sets all settings to maximum power
-		{Name: "⚡ Performance Mode", GetVal: func(b hal.Backend) string { return "EXECUTE" }, Action: func(b hal.Backend, d *Dashboard) { b.ApplyModePerformance(); d.showToast("PERFORMANCE MODE ACTIVATED") }},
+		{Name: "⚡ Performance Mode", GetVal: func(b hal.Backend) string { return "EXECUTE" }, Action: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.ApplyModePerformance(); d.showToast("PERFORMANCE MODE ACTIVATED") }},
 		// Extreme mode triggers the confirmation modal
 		{Name: "🔋 Extreme Mode", GetVal: func(b hal.Backend) string { return "EXECUTE" }, Action: func(b hal.Backend, d *Dashboard) { d.confirmExtreme = true }},
 		// Auto mode runs a background loop to manage power
 		{Name: "⚡ Auto Extreme Mode", GetVal: func(b hal.Backend) string { return "EXECUTE" }, Action: func(b hal.Backend, d *Dashboard) { b.StartAutoExtremeDaemon(); d.showToast("AUTO EXTREME DAEMON STARTED") }},
 		// Restore mode returns to normal state
-		{Name: "♻  Restore Mode", GetVal: func(b hal.Backend) string { return "EXECUTE" }, Action: func(b hal.Backend, d *Dashboard) { b.ApplyModeRestore(); d.showToast("RESTORE MODE ACTIVATED") }},
+		{Name: "♻  Restore Mode", GetVal: func(b hal.Backend) string { return "EXECUTE" }, Action: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.ApplyModeRestore(); d.showToast("RESTORE MODE ACTIVATED") }},
 		
 		{IsHeader: true, Name: ""}, // Empty spacer
 		{IsHeader: true, Name: "─── [ HARDWARE LIMITS ] ────────────────"}, // CPU Section
@@ -445,6 +445,7 @@ func (d *Dashboard) Run() {
 		case *tcell.EventKey: // If it's a keyboard event
 			if d.confirmExtreme { // If the extreme mode modal is open, intercept keys
 				if ev.Rune() == 'y' || ev.Rune() == 'Y' { // Yes
+					d.backend.StopDaemon()
 					d.backend.ApplyModeExtreme() // Apply
 					d.confirmExtreme = false // Close modal
 					d.showToast("EXTREME MODE ACTIVATED") // Notify
@@ -477,6 +478,7 @@ func (d *Dashboard) Run() {
 				close(d.quit) // Exit program
 				return
 			} else if ev.Rune() == 'r' || ev.Rune() == 'R' || ev.Key() == tcell.KeyCtrlR { // Hotkey for restore mode
+				d.backend.StopDaemon()
 				d.backend.ApplyModeRestore()
 				d.showToast("System Restored")
 				d.drawUI()
