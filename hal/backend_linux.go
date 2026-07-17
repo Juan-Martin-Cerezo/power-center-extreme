@@ -11,8 +11,6 @@ import (
 	"runtime" // Runtime library to check system info
 	"strconv" // String conversion library to parse numbers
 	"strings" // String manipulation library
-	"sync" // Sync library to protect shared state
-	"time" // Time library for delays
 )
 
 type LinuxBackend struct{} // Struct representing the Linux backend implementation
@@ -577,61 +575,6 @@ func (b *LinuxBackend) ApplyModeRestore() {
 	b.SetAutosuspend(false) // Default Devices to ready
 	b.SetWatchdog(true) // Standard kernel watchdog
 	b.SetVMWriteback(500) // Standard 5s disk flush
-}
-
-var daemonRunning bool // Global state to track if daemon is active
-var daemonQuit chan struct{} // Channel to signal the daemon to stop
-var daemonMutex sync.Mutex // Mutex to prevent race conditions on daemon state
-
-// StopDaemon stops the auto-extreme adjustment loop
-func (b *LinuxBackend) StopDaemon() {
-	daemonMutex.Lock()
-	defer daemonMutex.Unlock()
-	if daemonRunning && daemonQuit != nil {
-		close(daemonQuit) // Send kill signal
-		daemonRunning = false
-		daemonQuit = nil // Prevent double close
-	}
-}
-
-// StartAutoExtremeDaemon starts a background process that watches battery state
-func (b *LinuxBackend) StartAutoExtremeDaemon() {
-	b.StopDaemon() // Ensure only one runs at a time
-	
-	daemonMutex.Lock()
-	daemonQuit = make(chan struct{})
-	daemonRunning = true
-	daemonMutex.Unlock()
-
-	go func() { // Run in background goroutine
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-
-		// Helper to apply logic based on battery state
-		applyLogic := func() {
-			if b.IsCharging() { // If plugged in
-				b.ApplyModePerformance() // Ramp up performance
-			} else {
-				if b.GetBatteryPercentage() < 20 { // If battery critical
-					b.ApplyModeExtreme() // Go into extreme saving
-				} else { // If battery normal
-					b.ApplyModeRestore() // Run normally
-				}
-			}
-		}
-
-		// Run immediately the first time
-		applyLogic()
-
-		for {
-			select {
-			case <-ticker.C:
-				applyLogic()
-			case <-daemonQuit:
-				return // Exit goroutine
-			}
-		}
-	}()
 }
 
 func (b *LinuxBackend) SetBrightnessTarget(target string) {}

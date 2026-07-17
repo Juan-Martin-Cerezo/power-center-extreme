@@ -350,69 +350,67 @@ func buildMenuItems(d *Dashboard) []MenuItem {
 	return []MenuItem{
 		{IsHeader: true, Name: "─── [ PROFILES ] ───────────────────────"}, // Title
 		// Performance Mode sets all settings to maximum power
-		{Name: "⚡ Performance Mode", GetVal: func(b hal.Backend) string { return "EXECUTE" }, Action: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.ApplyModePerformance(); d.showToast("PERFORMANCE MODE ACTIVATED") }},
+		{Name: "⚡ Performance Mode", GetVal: func(b hal.Backend) string { return "EXECUTE" }, Action: func(b hal.Backend, d *Dashboard) { b.ApplyModePerformance(); d.showToast("PERFORMANCE MODE ACTIVATED") }},
 		// Extreme mode triggers the confirmation modal
 		{Name: "🔋 Extreme Mode", GetVal: func(b hal.Backend) string { return "EXECUTE" }, Action: func(b hal.Backend, d *Dashboard) { d.confirmExtreme = true }},
-		// Auto mode runs a background loop to manage power
-		{Name: "⚡ Auto Extreme Mode", GetVal: func(b hal.Backend) string { return "EXECUTE" }, Action: func(b hal.Backend, d *Dashboard) { b.StartAutoExtremeDaemon(); d.showToast("AUTO EXTREME DAEMON STARTED") }},
 		// Restore mode returns to normal state
-		{Name: "♻  Restore Mode", GetVal: func(b hal.Backend) string { return "EXECUTE" }, Action: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.ApplyModeRestore(); d.showToast("RESTORE MODE ACTIVATED") }},
+		{Name: "♻  Restore Mode", GetVal: func(b hal.Backend) string { return "EXECUTE" }, Action: func(b hal.Backend, d *Dashboard) { b.ApplyModeRestore(); d.showToast("RESTORE MODE ACTIVATED") }},
 		
 		{IsHeader: true, Name: ""}, // Empty spacer
 		{IsHeader: true, Name: "─── [ HARDWARE LIMITS ] ────────────────"}, // CPU Section
 		{Name: "Active Cores", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%d / %d", b.GetCores(), b.GetNumCPUs()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetCores(b.GetCores()+1) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetCores(b.GetCores()-1) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetCores(b.GetCores()+1) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetCores(b.GetCores()-1) }},
 		{Name: "CPU Freq (MHz)", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%d", b.GetFreqLimit()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetFreqLimit(b.GetFreqLimit()+100) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetFreqLimit(b.GetFreqLimit()-100) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetFreqLimit(b.GetFreqLimit()+100) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetFreqLimit(b.GetFreqLimit()-100) }},
 		{Name: "Freq iGPU (MHz)", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%d", b.GetGPUFreq()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetGPUFreq(b.GetGPUFreq()+50) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetGPUFreq(b.GetGPUFreq()-50) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetGPUFreq(b.GetGPUFreq()+50) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetGPUFreq(b.GetGPUFreq()-50) }},
 		{Name: "RAPL PL1 (W)", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%d", b.GetRAPLPL1()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetRAPLPL1(b.GetRAPLPL1()+2) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetRAPLPL1(b.GetRAPLPL1()-2) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetRAPLPL1(b.GetRAPLPL1()+2) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetRAPLPL1(b.GetRAPLPL1()-2) }},
 		{Name: "RAPL PL2 (W)", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%d", b.GetRAPLPL2()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetRAPLPL2(b.GetRAPLPL2()+2) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetRAPLPL2(b.GetRAPLPL2()-2) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetRAPLPL2(b.GetRAPLPL2()+2) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetRAPLPL2(b.GetRAPLPL2()-2) }},
 		{Name: "Turbo Boost", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%v", b.GetTurbo()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetTurbo(!b.GetTurbo()) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetTurbo(!b.GetTurbo()) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetTurbo(!b.GetTurbo()) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetTurbo(!b.GetTurbo()) }},
 		{Name: "Energy Perf Pref", GetVal: func(b hal.Backend) string { return b.GetEPP() }},
 		{Name: "PCIe ASPM Policy", GetVal: func(b hal.Backend) string { return b.GetASPM() }},
 
 		{IsHeader: true, Name: ""},
 		{IsHeader: true, Name: "─── [ PERIPHERALS ] ────────────────────"}, // Hardware section
 		{Name: "LCD Brightness (%)", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%d", b.GetLCDBrightness()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetLCDBrightness(b.GetLCDBrightness()+5) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetLCDBrightness(b.GetLCDBrightness()-5) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetLCDBrightness(b.GetLCDBrightness()+5) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetLCDBrightness(b.GetLCDBrightness()-5) }},
 		{Name: "Keyboard Light", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%v", b.GetKbdBacklight()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetKbdBacklight(!b.GetKbdBacklight()) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetKbdBacklight(!b.GetKbdBacklight()) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetKbdBacklight(!b.GetKbdBacklight()) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetKbdBacklight(!b.GetKbdBacklight()) }},
 		{Name: "Bluetooth", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%v", b.GetBluetooth()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetBluetooth(!b.GetBluetooth()) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetBluetooth(!b.GetBluetooth()) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetBluetooth(!b.GetBluetooth()) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetBluetooth(!b.GetBluetooth()) }},
 		{Name: "WiFi Enable", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%v", b.GetWifiEnable()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetWifiEnable(!b.GetWifiEnable()) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetWifiEnable(!b.GetWifiEnable()) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetWifiEnable(!b.GetWifiEnable()) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetWifiEnable(!b.GetWifiEnable()) }},
 
 		{IsHeader: true, Name: ""},
 		{IsHeader: true, Name: "─── [ SYSTEM TWEAKS ] ──────────────────"}, // Kernel section
 		{Name: "WiFi Power Save", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%v", b.GetWifiPowerSave()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetWifiPowerSave(!b.GetWifiPowerSave()) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetWifiPowerSave(!b.GetWifiPowerSave()) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetWifiPowerSave(!b.GetWifiPowerSave()) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetWifiPowerSave(!b.GetWifiPowerSave()) }},
 		{Name: "Audio Power Save", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%v", b.GetAudioPowerSave()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetAudioPowerSave(!b.GetAudioPowerSave()) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetAudioPowerSave(!b.GetAudioPowerSave()) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetAudioPowerSave(!b.GetAudioPowerSave()) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetAudioPowerSave(!b.GetAudioPowerSave()) }},
 		{Name: "Autosuspend PCI/USB", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%v", b.GetAutosuspend()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetAutosuspend(!b.GetAutosuspend()) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetAutosuspend(!b.GetAutosuspend()) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetAutosuspend(!b.GetAutosuspend()) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetAutosuspend(!b.GetAutosuspend()) }},
 		{Name: "Watchdog Kernel", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%v", b.GetWatchdog()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetWatchdog(!b.GetWatchdog()) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetWatchdog(!b.GetWatchdog()) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetWatchdog(!b.GetWatchdog()) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetWatchdog(!b.GetWatchdog()) }},
 		{Name: "VM Writeback (s)", GetVal: func(b hal.Backend) string { return fmt.Sprintf("%d", b.GetVMWriteback()) }, 
-			Inc: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetVMWriteback(b.GetVMWriteback()+1) }, 
-			Dec: func(b hal.Backend, d *Dashboard) { b.StopDaemon(); b.SetVMWriteback(b.GetVMWriteback()-1) }},
+			Inc: func(b hal.Backend, d *Dashboard) { b.SetVMWriteback(b.GetVMWriteback()+1) }, 
+			Dec: func(b hal.Backend, d *Dashboard) { b.SetVMWriteback(b.GetVMWriteback()-1) }},
 		{Name: "Process Purge", GetVal: func(b hal.Backend) string { return "EXECUTE" }, 
 			Action: func(b hal.Backend, d *Dashboard) { b.ProcessPurge(); d.showToast("PROCESSES PURGED") }},
 	}
@@ -445,7 +443,6 @@ func (d *Dashboard) Run() {
 		case *tcell.EventKey: // If it's a keyboard event
 			if d.confirmExtreme { // If the extreme mode modal is open, intercept keys
 				if ev.Rune() == 'y' || ev.Rune() == 'Y' { // Yes
-					d.backend.StopDaemon()
 					d.backend.ApplyModeExtreme() // Apply
 					d.confirmExtreme = false // Close modal
 					d.showToast("EXTREME MODE ACTIVATED") // Notify
@@ -478,7 +475,6 @@ func (d *Dashboard) Run() {
 				close(d.quit) // Exit program
 				return
 			} else if ev.Rune() == 'r' || ev.Rune() == 'R' || ev.Key() == tcell.KeyCtrlR { // Hotkey for restore mode
-				d.backend.StopDaemon()
 				d.backend.ApplyModeRestore()
 				d.showToast("System Restored")
 				d.drawUI()

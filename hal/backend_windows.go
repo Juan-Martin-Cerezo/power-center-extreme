@@ -115,8 +115,4 @@ func (b *WindowsBackend) ApplyModePerformance() {}
 func (b *WindowsBackend) ApplyModeExtreme() {}
 // ApplyModeRestore restores default settings
 func (b *WindowsBackend) ApplyModeRestore() {}
-// StartAutoExtremeDaemon starts auto adjustment daemon
-func (b *WindowsBackend) StartAutoExtremeDaemon() {}
-// StopDaemon stops the background daemon
-func (b *WindowsBackend) StopDaemon() {}
 
