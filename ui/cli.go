@@ -6,7 +6,7 @@ import ( // Standard library imports
 	"strings" // String manipulations (like repeat, split, etc)
 	"time" // Time handling for sleep and intervals
 
-	"volttamer/hal" // Our own Hardware Abstraction Layer
+	"wattwarden/hal" // Our own Hardware Abstraction Layer
 
 	"github.com/gdamore/tcell/v2" // The tcell library used to draw to the terminal
 )

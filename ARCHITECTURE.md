@@ -1,6 +1,6 @@
 # System Architecture ⚙️
 
-Power Center Extreme uses a highly modular, decoupled architecture focused on performance, maintainability, and cross-platform compatibility.
+WattWarden uses a highly modular, decoupled architecture focused on performance, maintainability, and cross-platform compatibility.
 
 ## Core Design Principles
 
@@ -11,7 +11,7 @@ Power Center Extreme uses a highly modular, decoupled architecture focused on pe
 ## Directory Structure
 
 ```
-power-center-extreme/
+wattwarden/
 ├── main.go               # Entry point, parses flags (like --daemon) and injects backend
 ├── hal/                  # Hardware Abstraction Layer
 │   ├── backend.go        # Defines the `Backend` interface that all OS-specific files must implement

@@ -1,4 +1,4 @@
-module volttamer
+module wattwarden
 
 go 1.26.4
 
