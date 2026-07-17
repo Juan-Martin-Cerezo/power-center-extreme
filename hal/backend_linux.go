@@ -604,18 +604,29 @@ func (b *LinuxBackend) StartAutoExtremeDaemon() {
 	daemonMutex.Unlock()
 
 	go func() { // Run in background goroutine
-		for {
-			select { // Wait for either 10 seconds or a quit signal
-			case <-time.After(10 * time.Second):
-				if b.IsCharging() { // If plugged in
-					b.ApplyModePerformance() // Ramp up performance
-				} else {
-					if b.GetBatteryPercentage() < 20 { // If battery critical
-						b.ApplyModeExtreme() // Go into extreme saving
-					} else { // If battery normal
-						b.ApplyModeRestore() // Run normally
-					}
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		// Helper to apply logic based on battery state
+		applyLogic := func() {
+			if b.IsCharging() { // If plugged in
+				b.ApplyModePerformance() // Ramp up performance
+			} else {
+				if b.GetBatteryPercentage() < 20 { // If battery critical
+					b.ApplyModeExtreme() // Go into extreme saving
+				} else { // If battery normal
+					b.ApplyModeRestore() // Run normally
 				}
+			}
+		}
+
+		// Run immediately the first time
+		applyLogic()
+
+		for {
+			select {
+			case <-ticker.C:
+				applyLogic()
 			case <-daemonQuit:
 				return // Exit goroutine
 			}
