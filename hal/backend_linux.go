@@ -107,15 +107,46 @@ func (b *LinuxBackend) SetFreqLimit(mhz int) {
 	}
 }
 
+var (
+	batteryPathOnce sync.Once
+	batteryPath     string
+)
+
+// getBatteryPath dynamically locates the system's primary battery directory
+func getBatteryPath() string {
+	batteryPathOnce.Do(func() {
+		// First try standard names
+		for _, name := range []string{"BAT0", "BAT1", "BAT2", "BATT"} {
+			p := "/sys/class/power_supply/" + name
+			if _, err := os.Stat(p); err == nil {
+				batteryPath = p
+				return
+			}
+		}
+		// Fallback: scan for any supply with type "Battery"
+		matches, _ := filepath.Glob("/sys/class/power_supply/*")
+		for _, p := range matches {
+			typeContent, _ := os.ReadFile(filepath.Join(p, "type"))
+			if strings.TrimSpace(string(typeContent)) == "Battery" {
+				batteryPath = p
+				return
+			}
+		}
+		// Final fallback
+		batteryPath = "/sys/class/power_supply/BAT0"
+	})
+	return batteryPath
+}
+
 // GetBatteryPercentage returns the current battery level
 func (b *LinuxBackend) GetBatteryPercentage() int {
-	v, _ := strconv.Atoi(readSys("/sys/class/power_supply/BAT0/capacity")) // Read 0-100 percentage
+	v, _ := strconv.Atoi(readSys(filepath.Join(getBatteryPath(), "capacity"))) // Read 0-100 percentage
 	return v // Return it
 }
 
 // IsCharging checks if the device is plugged in
 func (b *LinuxBackend) IsCharging() bool {
-	status := readSys("/sys/class/power_supply/BAT0/status") // Read charging state
+	status := readSys(filepath.Join(getBatteryPath(), "status")) // Read charging state
 	return status == "Charging" || status == "Full" || status == "Not charging" // Return true if plugged in
 }
 
@@ -125,13 +156,14 @@ func (b *LinuxBackend) GetBatteryTime() string {
 		return "Charging" // Simple string
 	}
 	
-	energyStr := readSys("/sys/class/power_supply/BAT0/energy_now") // Attempt to read energy in micro-watt-hours
-	powerStr := readSys("/sys/class/power_supply/BAT0/power_now") // Attempt to read power in micro-watts
+	bat := getBatteryPath()
+	energyStr := readSys(filepath.Join(bat, "energy_now")) // Attempt to read energy in micro-watt-hours
+	powerStr := readSys(filepath.Join(bat, "power_now")) // Attempt to read power in micro-watts
 	
 	if energyStr == "" || powerStr == "" { // If hardware reports in amps/charge instead
-		energyStr = readSys("/sys/class/power_supply/BAT0/charge_now") // Read micro-amp-hours
-		powerStr = readSys("/sys/class/power_supply/BAT0/current_now") // Read micro-amps
-		voltageStr := readSys("/sys/class/power_supply/BAT0/voltage_now") // Read micro-volts
+		energyStr = readSys(filepath.Join(bat, "charge_now")) // Read micro-amp-hours
+		powerStr = readSys(filepath.Join(bat, "current_now")) // Read micro-amps
+		voltageStr := readSys(filepath.Join(bat, "voltage_now")) // Read micro-volts
 		
 		if energyStr != "" && powerStr != "" && voltageStr != "" { // If all are available
 			e, _ := strconv.ParseFloat(energyStr, 64) // Convert to float
@@ -166,9 +198,25 @@ func (b *LinuxBackend) GetBatteryTime() string {
 
 // GetPowerConsumptionWatts returns current discharge rate in Watts
 func (b *LinuxBackend) GetPowerConsumptionWatts() float64 {
-	c, _ := strconv.Atoi(readSys("/sys/class/power_supply/BAT0/current_now")) // Read current
-	v, _ := strconv.Atoi(readSys("/sys/class/power_supply/BAT0/voltage_now")) // Read voltage
-	return float64(c) * float64(v) / 1000000000000.0 // Calculate and convert to Watts
+	bat := getBatteryPath()
+	
+	// 1. Some systems expose power_now (microwatts) directly
+	if pStr := readSys(filepath.Join(bat, "power_now")); pStr != "" {
+		if pVal, err := strconv.ParseFloat(pStr, 64); err == nil {
+			return pVal / 1000000.0 // Convert microwatts to Watts
+		}
+	}
+	
+	// 2. Fallback: current_now (microamperes) * voltage_now (microvolts)
+	cStr := readSys(filepath.Join(bat, "current_now"))
+	vStr := readSys(filepath.Join(bat, "voltage_now"))
+	if cStr != "" && vStr != "" {
+		c, _ := strconv.ParseFloat(cStr, 64)
+		v, _ := strconv.ParseFloat(vStr, 64)
+		return (c * v) / 1000000000000.0 // Calculate and convert to Watts
+	}
+	
+	return 0.0
 }
 
 
